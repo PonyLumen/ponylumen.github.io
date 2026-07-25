@@ -1,0 +1,2109 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>3D Pony Creator by PonyLumen</title>
+	<meta name="description" content="Create and customize your own 3D pony. No download required." />
+	
+	<!--
+	  
+		3D Pony Creator
+		Copyright 2013-2015, PonyLumen
+	   
+	    version 1.1.9
+	-->
+
+	
+	<link rel="icon" type="image/png" href="favicon.png" />
+	<link href="css/style_v.1.1.9.css" rel="stylesheet" type="text/css" />
+
+	
+	
+	
+	
+	<!-- Shaders -->
+
+	<script id="shader-fs-Picking-ID" type="x-shader/x-fragment"> 
+		precision highp float;
+		uniform vec3 uID;
+		void main()
+		{
+			gl_FragColor = vec4(uID,1.0);
+		}
+	</script> 
+	<script id="shader-vs-Picking-ID" type="x-shader/x-vertex"> 
+		precision highp float;
+	
+		attribute vec3 VertexPosition; 
+		attribute vec4 Joint;
+		attribute vec4 Weight;
+		
+		uniform mat4 Anim[30];
+		uniform mat4 uMVMatrix; 
+		uniform mat4 uPMatrix; 
+		
+		void main() { 
+
+			vec4 newPos;
+			vec3 newPos3 = VertexPosition;
+			
+		   int index;
+		   index=int(Joint.x);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.x;
+		   index=int(Joint.y);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.y + newPos;
+		   index=int(Joint.z);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.z + newPos;
+		   index=int(Joint.w);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.w + newPos;
+		   
+		   gl_Position = uPMatrix * uMVMatrix * vec4(newPos.xyz, 1.0);
+		} 
+	</script>
+	
+
+	
+	
+	<!-- 
+	
+		fragment shader for most of the models
+	
+	-->
+	<script id="shader-fs" type="x-shader/x-fragment"> 
+		// fragment shader for most of the models (body, hair, tail, wings, horn)
+		
+		
+		precision highp float;
+	
+		varying highp vec3 N ;
+		varying highp vec3 v ;
+		varying highp vec2 vTexCoord;
+		uniform sampler2D uSampler;
+		uniform sampler2D uSampler2;
+		
+		uniform vec4 uFirstColor; 
+		uniform vec4 uSecondColor; 
+		uniform vec4 uThirdColor; 
+		uniform float uShininess; 
+		
+		uniform vec4 uPosLight0;
+		uniform vec4 uAmbientLight0;
+		uniform vec4 uDiffuseLight0;
+		uniform vec4 uSpecularLight0;
+		
+		uniform int uShadingType;
+		uniform float uTex1Alpha;
+		uniform float uTex1u;
+		uniform float uTex1v;
+		uniform vec3 uHSV;
+		
+		vec3 rgb2hsv(vec3 c)
+		{
+			// source http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+			vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+			vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+			vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+			float d = q.x - min(q.w, q.y);
+			float e = 1.0e-10;
+			return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+		}
+		
+		vec3 hsv2rgb(vec3 c)
+		{
+			// source http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+			vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+			vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+			return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+		}
+		
+		
+		vec4 light0 ()
+		{
+			vec4 color;
+			vec3 L = uPosLight0.xyz - v;
+			float dist = length(L);
+			L = normalize(L);
+			vec3 E = normalize(-v);
+			vec3 R = normalize(-reflect(L,N)); 
+
+			float atten = 1.0;
+			vec4 Iamb = uAmbientLight0;
+			vec4 Idiff = uDiffuseLight0 * max(dot(N,L), 0.0);
+			vec4 Ispec = uSpecularLight0 * pow(max(dot(R,E),0.0),0.3*uShininess);
+			color = atten * (Iamb + Idiff) + Ispec ;
+			return color;
+		}
+
+		void main()
+		{
+			
+			vec4 finalColor;
+			
+			// ---------------------
+			// compute object color
+			// ---------------------
+			finalColor = uFirstColor * texture2D(uSampler, vTexCoord).x;
+			finalColor += uSecondColor * texture2D(uSampler, vTexCoord).y;
+			finalColor += uThirdColor * texture2D(uSampler, vTexCoord).z;
+			
+			// ---------------------
+			// add cutie mark texture (or rainbow dash tail, which is a special texture)
+			// ---------------------
+
+			vec4 tex2 = texture2D(uSampler2, vTexCoord+vec2(uTex1u,uTex1v));
+			float alpha = tex2.w*uTex1Alpha;
+			
+			vec3 texHSV = rgb2hsv(tex2.xyz);
+			float hue = texHSV.x + uHSV.x;
+			float saturation = texHSV.y * uHSV.y;
+			float value = texHSV.z * uHSV.z;
+			vec3 finalHSV = vec3(hue,saturation,value);
+			vec3 v3color = hsv2rgb(finalHSV);
+			
+			finalColor.x  = mix(finalColor.x ,v3color.x,alpha);
+			finalColor.y  = mix(finalColor.y ,v3color.y,alpha);
+			finalColor.z  = mix(finalColor.z ,v3color.z,alpha);
+			
+			
+			// ---------------------
+			// add shading
+			// ---------------------
+			
+			// lambert
+			if(uShadingType == 1){
+				finalColor = finalColor * light0();
+			}
+			
+			// toon
+			else if(uShadingType == 2){
+				vec3 lightDir = normalize(uPosLight0.xyz - v); 
+				float intensity = max(dot(N,lightDir), 0.0);
+				if(intensity < 0.2) intensity = 0.2;
+				else if(intensity < 0.7) intensity = 0.6;
+				else intensity = 1.0;
+
+				finalColor =  intensity*finalColor;
+				
+			}
+			finalColor.w = texture2D(uSampler, vTexCoord).w; // transparency texture
+			
+			gl_FragColor = finalColor;
+		}
+	</script> 
+
+	<!-- 
+	
+		fragment shader for stickers
+	
+	-->
+	
+	<script id="shader-fs-Sticker" type="x-shader/x-fragment"> 
+		// fragment shader for stickers
+		precision highp float;
+	
+		varying highp vec3 N ;
+		varying highp vec3 v ;
+		varying highp vec2 vTexCoord;
+		uniform sampler2D uSampler;
+		
+		uniform float uShininess; 
+		
+		uniform vec4 uPosLight0;
+		uniform vec4 uAmbientLight0;
+		uniform vec4 uDiffuseLight0;
+		uniform vec4 uSpecularLight0;
+		
+		uniform int uShadingType;
+		  
+		vec4 light0 ()
+		{
+			vec4 color;
+			vec3 L = uPosLight0.xyz - v;
+			float dist = length(L);
+			L = normalize(L);
+			vec3 E = normalize(-v);
+			vec3 R = normalize(-reflect(L,N)); 
+			
+			float atten = 1.0;
+			vec4 Iamb = uAmbientLight0;
+			vec4 Idiff = uDiffuseLight0 * max(dot(N,L), 0.0);
+			vec4 Ispec = uSpecularLight0 * pow(max(dot(R,E),0.0),0.3*uShininess);
+			color = atten * (Iamb + Idiff) + Ispec ;
+			return color;
+		}
+
+		void main()
+		{
+			vec4 finalColor;
+			
+			finalColor = texture2D(uSampler, vTexCoord);
+			
+			// ---------------------
+			// add shading
+			// ---------------------
+			
+			// lambert
+			if(uShadingType == 1){
+				finalColor = finalColor * light0();
+			}
+			
+			// toon
+			else if(uShadingType == 2){
+				vec3 lightDir = normalize(uPosLight0.xyz - v); 
+				float intensity = max(dot(N,lightDir), 0.0);
+				if(intensity < 0.2) intensity = 0.2;
+				else if(intensity < 0.7) intensity = 0.6;
+				else intensity = 1.0;
+				finalColor =  intensity*finalColor;
+			}
+			
+			gl_FragColor = finalColor;
+		}
+	</script> 
+	
+	<!-- 
+	
+		fragment shader for eyes 
+	
+	-->
+	
+	<script id="shader-fs-eye" type="x-shader/x-fragment"> 
+		// fragment shader for eyes 
+		precision highp float;
+	
+		varying highp vec3 N ;
+		varying highp vec3 v ;
+		varying highp vec2 vTexCoord;
+		uniform sampler2D uSampler;
+		
+		uniform vec3 uHSV;
+		uniform vec3 uWhitecolor; 
+		uniform float uShininess; 
+		uniform vec2 uUVtranslation;
+		uniform float uUVscale;
+		uniform vec4 uPosLight0;
+		uniform vec4 uAmbientLight0;
+		uniform vec4 uDiffuseLight0;
+		uniform vec4 uSpecularLight0;
+		
+		uniform int uShadingType;
+		  
+		vec4 light0 ()
+		{
+			vec4 color;
+			vec3 L = uPosLight0.xyz - v;
+			float dist = length(L);
+			L = normalize(L);
+			vec3 E = normalize(-v);
+			vec3 R = normalize(-reflect(L,N)); 
+
+			float atten = 1.0;
+			vec4 Iamb = uAmbientLight0;
+			vec4 Idiff = uDiffuseLight0 * max(dot(N,L), 0.0);
+			vec4 Ispec = uSpecularLight0 * pow(max(dot(R,E),0.0),0.3*uShininess);
+			color = Iamb + atten * Idiff + Ispec ;
+			return color;
+		}
+
+		vec3 rgb2hsv(vec3 c)
+		{
+			// source http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+			vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+			vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+			vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+			float d = q.x - min(q.w, q.y);
+			float e = 1.0e-10;
+			return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+		}
+		
+		vec3 hsv2rgb(vec3 c)
+		{
+			// source http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+			vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+			vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+			return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+		}
+
+		void main()
+		{
+			vec2 finalUV = vTexCoord; 
+			vec2 centerUV = vec2(0.5,0.5); // It's the center of the pupil. It can be different from (0.5,0.5).
+			finalUV = (finalUV - centerUV) * uUVscale + centerUV;
+			finalUV = finalUV + uUVtranslation;
+			
+			vec4 tex = texture2D(uSampler, finalUV);
+			vec3 texColor = tex.xyz;
+			vec3 texHSV = rgb2hsv(texColor);
+	
+			float hue = texHSV.x + uHSV.x;
+			float saturation = texHSV.y * uHSV.y;
+			float value = texHSV.z * uHSV.z;
+			
+			vec3 finalHSV = vec3(hue,saturation,value);
+			
+			vec3 v3color = hsv2rgb(finalHSV);
+			
+			vec4 finalColor = vec4(v3color,1.0);
+			
+			// replace alpha by white (or custom color)
+			finalColor.x  = mix(uWhitecolor.x,finalColor.x,tex.w);
+			finalColor.y  = mix(uWhitecolor.y,finalColor.y,tex.w);
+			finalColor.z  = mix(uWhitecolor.z,finalColor.z,tex.w);
+			
+			finalColor.w = 1.0;
+			
+			// ---------------------
+			// add shading
+			// ---------------------
+
+			// lambert
+			/*if(uShadingType == 1){
+				finalColor = finalColor * light0();
+				finalColor.w = 1.0;
+			}
+			*/
+			// toon
+			if(uShadingType == 2){
+				vec3 lightDir = normalize(uPosLight0.xyz - v); 
+				float intensity = max(dot(N,lightDir), 0.0);
+				if(intensity < 0.2) intensity = 0.2;
+				else if(intensity < 0.7) intensity = 0.6;
+				else intensity = 1.0;
+
+				finalColor =  intensity*finalColor;
+				finalColor.w = 1.0;
+			}
+
+			gl_FragColor = finalColor;
+		}
+	</script> 
+	
+	
+	
+	<script id="shader-fs-Picking" type="x-shader/x-fragment"> 
+		precision highp float;
+		varying vec3 vTriangleID;
+		void main()
+		{
+			gl_FragColor = vec4(vTriangleID.xyz,1.0);
+		}
+	</script> 
+	<!-- 
+	
+		vertex shader for picking body triangles
+	
+	-->
+	
+	<script id="shader-vs-Picking" type="x-shader/x-vertex"> 
+		// vertex shader for the body
+		precision highp float;
+	
+		attribute vec3 VertexPosition; 
+		attribute vec4 Joint;
+		attribute vec4 Weight;
+		attribute vec3 aTriangleID;
+		
+		uniform mat4 Anim[30];
+		uniform mat4 uMVMatrix; 
+		uniform mat4 uPMatrix; 
+		
+		varying vec3 vTriangleID;
+		
+		void main() { 
+
+			vec4 newPos;
+			vec3 newPos3 = VertexPosition;
+			
+		   // Apply animation
+		   
+		   int index;
+		   index=int(Joint.x);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.x;
+		   index=int(Joint.y);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.y + newPos;
+		   index=int(Joint.z);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.z + newPos;
+		   index=int(Joint.w);
+		   newPos = (Anim[index] * vec4(newPos3,1.0)) * Weight.w + newPos;
+		   
+		   
+		   vTriangleID = aTriangleID;
+		   gl_Position = uPMatrix * uMVMatrix * vec4(newPos.xyz, 1.0);
+		} 
+	</script>
+	
+	
+	
+	
+
+	<!-- 
+	
+		vertex shader for hair, tail, eyes 
+	
+	-->
+	
+	<script id="shader-vs2" type="x-shader/x-vertex"> 
+		// vertex shader for hair, tail, eyes 
+		precision highp float;
+	
+		attribute vec3 VertexPosition; 
+		attribute vec3 VertexNormal;
+		attribute vec2 VertexTexCoord;
+		attribute vec4 Joint;
+		attribute vec4 Weight;
+		
+		uniform mat4 Anim[30];
+		uniform mat4 uMVMatrix; 
+		uniform mat4 uPMatrix; 
+		uniform mat3 NormalMatrix;
+		varying highp vec3 N ;
+		varying highp vec3 v ;
+		varying highp vec2 vTexCoord;
+		
+		void main(void) { 
+
+			vec4 newVertex;
+			vec4 newNormal;
+			vec3 newVertex3 = VertexPosition;
+			int index;
+			
+		   //-----------------------
+		   // anim
+		   //-----------------------
+		   index=int(Joint.x);
+		   newVertex = (Anim[index] * vec4(newVertex3,1.0)) * Weight.x;
+		   newNormal = (Anim[index] * vec4(VertexNormal, 0.0)) * Weight.x;
+		   index=int(Joint.y);
+		   newVertex = (Anim[index] * vec4(newVertex3,1.0)) * Weight.y + newVertex;
+		   newNormal = (Anim[index] * vec4(VertexNormal, 0.0)) * Weight.y + newNormal;
+		   index=int(Joint.z);
+		   newVertex = (Anim[index] * vec4(newVertex3,1.0)) * Weight.z + newVertex;
+		   newNormal = (Anim[index] * vec4(VertexNormal, 0.0)) * Weight.z + newNormal;
+		   index=int(Joint.w);
+		   newVertex = (Anim[index] * vec4(newVertex3,1.0)) * Weight.w + newVertex;
+		   newNormal = (Anim[index] * vec4(VertexNormal, 0.0)) * Weight.w + newNormal;
+		   
+		    N = normalize(NormalMatrix * vec3(newNormal));
+			v = vec3(uMVMatrix * newVertex);
+			vTexCoord = VertexTexCoord;
+			gl_Position = uPMatrix * uMVMatrix * vec4(newVertex.xyz, 1.0);
+
+		} 
+	</script>
+	
+	
+	
+	<!-- 
+	
+		shaders for background
+	
+	-->
+	
+	<script id="shader-fsObject" type="x-shader/x-fragment"> 
+		precision highp float;
+		varying highp vec2 vTexCoord;
+		uniform sampler2D uSampler;
+		
+		void main()
+		{
+			vec4 finalColor = texture2D(uSampler, vTexCoord);
+			//vec4 finalColor = vec4(0.0,0.0,1.0,1.0);
+			gl_FragColor = finalColor;
+		}
+		
+	</script> 
+	
+	<script id="shader-vsObject" type="x-shader/x-vertex"> 
+		precision highp float;
+		attribute vec3 VertexPosition; 
+		attribute vec2 VertexTexCoord;
+		varying highp vec2 vTexCoord;
+		uniform mat4 uMVMatrix; 
+		uniform mat4 uPMatrix; 
+		
+		void main() { 
+			vTexCoord = VertexTexCoord;
+			gl_Position = uPMatrix * uMVMatrix * vec4(VertexPosition, 1.0);
+		} 
+	</script>
+	
+	
+	
+	<script src="js/jquery-2.1.0.min.js"></script>
+	<script>
+	
+	
+	function init() {
+		startWebGL();
+	}
+		
+		
+	</script>
+
+	
+</head>
+
+
+
+
+
+
+<body onload = "init();">
+
+	
+
+	<!-- banner at the top -->
+	<div id="upheader">
+		<div id="upheader-left">
+			<a class="uptab" href="http://ponylumen.net">Home</a>
+			
+			
+			<a class="uptab" href="http://ponylumen.net/about-me">About me</a>
+			
+			
+		</div>
+		
+			
+
+		<div id="upheader-right">
+			<a href="mailto:ponylumen@gmail.com" target="_blank">
+			<img class="imgLink" src="img/html/gmail.png" alt="mail"/></a>
+		</div>
+		
+		
+			
+	</div>
+	
+		
+	<!-- logo 3D Pony Creator -->
+	<div class="header">
+		<img class="logo" src="img/logo2.png" alt="3D PONY CREATOR" /> 
+		<div class="counter">
+			<div class="pageViews">
+				<!-- number of visitors since the 20 last minutes -->
+				<img  src="img/mini_pinkie.png" alt="n" height="28" width="28"/>
+				<span> number of visitors since the 20 last minutes </span>
+			</div>
+		</div>	
+	</div>
+
+	
+	
+	
+		
+		
+		
+	<!-- 3d canvas + right menu -->
+	
+	<table class="game-aera">
+	  <tr>
+		<td>
+		
+		  <!-- 3d canvas -->
+			
+	
+	
+		  <div class="canvas-holder">	
+				<canvas id="glcanvas" width="900" height="675">
+				  Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+				</canvas>
+				<!--<div id="game-background"/> We can't use css background because it's not drawn when the user downloads the image.  -->
+			<br>
+			
+        
+			<button id="buttonPrintCanvasID1" type="submit" value="Download picture" onclick="buttonPrintCanvas()">
+			  <span style="font-size: 16px;"> Download picture </span>
+			  <img src="img/download_icon.png" alt="dl"/>
+			</button>
+			   
+			
+			<div class="bgclass">
+				<span style="font-family: 'Calibri'; color:#FFF"> Background </span>
+				<select id="bgSelect" class='select' onchange="changeBGTexture(this.value)" >
+					<option value="0">No background</option>
+					<option selected value="1">Grassland</option>
+					<option value="2">Orchard sunset</option>
+					<option value="3">Zap apple trees</option>
+					<option value="4">Pond</option>
+					<option value="5">Snow mountain</option>
+					<option value="6">Bridge</option>
+					<option value="7">Road to volcano</option>
+					<option value="8">Bridge 2</option>
+				</select> 
+				<input id="bgColor" class="color" value="DDDDDD">
+				<span style="font-family: 'Calibri'; color:#FFF">Transparency </span>
+				<input id="bgTransparency" type="range" min="0" max="1" value="0.4" step="0.01" />
+			</div>
+			
+			 
+			
+		  </div>
+		</td>
+
+		
+		
+		<!-- right menu -->
+		
+		<td class="right-menu">
+		
+			<div class="conteneur-onglets">
+			
+				<!-- tabs -->
+				
+				<div class="inactif onglet" id="affiche-contenu-1" onclick="displayTab('1');">Body</div>
+				<div class="inactif onglet" id="affiche-contenu-9" onclick="displayTab('9');">Ears & eyes</div>
+				<div class="inactif onglet" id="affiche-contenu-10" onclick="displayTab('10');">Mane & tail</div>
+				<div class="inactif onglet" id="affiche-contenu-2" onclick="displayTab('2');">Accessories</div>
+				<div class="inactif onglet" id="affiche-contenu-3" onclick="displayTab('3');">Face</div>
+				<div class="inactif onglet" id="affiche-contenu-5" onclick="displayTab('5');">Stickers</div>
+				<div class="inactif onglet" id="affiche-contenu-6" onclick="displayTab('6');">Light</div>
+				<div class="inactif onglet" id="affiche-contenu-7" onclick="displayTab('7');">Pose</div>
+				<div class="inactif onglet" id="affiche-contenu-4" onclick="displayTab('4');">Load/Save</div>
+				<div class="inactif onglet" id="affiche-contenu-8" onclick="displayTab('8');">Extra</div>
+			</div>
+		
+
+			<!-- contents (in the right menu) -->
+			
+			<div class="contenu" id="contenu_1">
+			
+				<!-- custom textures (for testing purposes only) -->
+				<!--
+				<input type="button" value="Import body texture" onclick="$('#importTextureBody').click();" />
+				<br>
+				
+				<input type="button" value="Import eye texture" onclick="$('#importTextureEye').click();" />
+				<br>
+				-->
+				
+				<div>
+					<img id="femaleSign" alt="female" src="img/female_sign1.png" class="stickerImgActive" onclick="changeFemaleBody()"/>
+					<img id="maleSign" alt="male" src="img/male_sign1.png" class="stickerImgInactive" onclick="changeMaleBody()"/>
+					<img id="longFaceSign" alt="longface" src="img/longface_sign.png" class="stickerImgInactive" onclick="changeLongFace()"/>
+				</div>
+
+				<br>
+				Animation
+				<select id="animationSelect" name="animationSelect" class='select' onchange="changeAnimation(this.value)" >
+				  <option value="stand">Stand</option>
+				  <option value="custom">Custom pose</option>
+				  <option value="walk">Walk</option>
+				  <option value="trot">Trot</option>
+				  <option value="run">Run</option>
+				  <option value="flying_stationary">Fly</option>
+				</select> 
+				<br>
+				Animation speed
+				<input id="animSpeedID" type="range" min="0" max="4" value="1.0" step="0.01" />
+				<br>
+				<br>
+				Height<input id="ponyHeight" type="range" min="-100" max="100" value="0" step="1" onchange="changePonyHeight(this.value,false)" /><br>
+				Weight<input id="ponyWeight" type="range" min="-0.5" max="1" value="0" step="0.01" onchange="changeMorphValue(50,this.value)" /><br>
+				Head size<input id="headSize" type="range" min="0.8" max="1.2" value="1" step="0.001" onchange="changeHeadSize(this.value)" /><br>
+
+				<br>
+				
+				Body color 
+				<select id="bodyColorStyleSelect" name="bodyColorStyleSelect" class='select' onchange="changeBodyColorStyle(this.value)" >
+				  <option value="0">Standard female</option>
+				  <option value="3">Standard male</option>
+				  <option value="1">Gradient legs (F)</option>
+				  <option value="22">Gradient legs (M)</option>
+				  <option value="2">Cow spots (F)</option>
+				  <option value="23">Cow spots (M)</option>
+				  <option value="5">Marking 1</option>
+				  <option value="4">Zecora skin (F)</option>
+				  <option value="24">Zecora skin (M)</option>
+				  <option value="6">Muzzle</option>
+				  <option value="7">Wonderbolt outfit (F)</option>
+				  <option value="25">Wonderbolt outfit (M)</option>
+				  <option value="8">Socks (F)</option>
+				  <option value="26">Socks (M)</option>
+				  <option value="27">Bare hooves 1 (F)</option>
+				  <option value="9">Bare hooves 1 (M)</option>
+				  <option value="28">Bare hooves 2 (F)</option>
+				  <option value="10">Bare hooves 2 (M)</option>
+				  <option value="29">Pipsqueak (F)</option>
+				  <option value="11">Pipsqueak (M)</option>
+				  <!--<option value="12">Striped legs</option>-->
+				  <option value="13">Mane-iac costume (F)</option>
+				  <option value="30">Mane-iac costume (M)</option>
+				  <!--<option value="14">Gummy suit</option>-->
+				  <option value="15">Ninja outfit</option>
+				  <option value="16">Chrysalis (F)</option>
+				  <option value="31">Chrysalis (M)</option>
+				  <option value="17">Spots (F)</option>
+				  <option value="32">Spots (M)</option>
+				  <option value="18">Mech 1 (F)</option>
+				  <option value="33">Mech 1 (M)</option>
+				  <option value="19">Mech 2 (F)</option>
+				  <option value="34">Mech 2 (M)</option>
+				  <option value="20">Mech 3 (F)</option>
+				  <option value="35">Mech 3 (M)</option>
+				  <option value="21">Mech 4 (F)</option>
+				  <option value="36">Mech 4 (M)</option>
+				  
+				</select> 
+				<br>
+				<input id="bodyColor1" class="color" value="8795CC">
+				<input id="bodyColor2" class="color" value="7C4DCF">
+				<input id="bodyColor3" class="color" value="3737CF">
+				<br>				
+				<br>
+				
+
+				
+
+				Horn
+				<select id="hornStyleSelect" name="hornStyleSelect" class='select' onchange="changeHornModel(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Normal horn</option>
+				  <option value="2">Alicorn horn</option>
+				  <option value="3">Chrysalis horn</option>
+				  
+				</select>
+				<br>
+				<input id="hornColor1" class="color" value="8795CC"> 
+				<input id="hornColor2" class="color" value="A3A3A3">
+				<br>
+				Horn size <input id="hornSize" type="range" min="-100" max="100" value="0" step="1" onchange="changeHornSize(this.value)" />
+				<br>
+				<br>
+				
+				Wings
+				<select id="wingStyleSelect" name="wingStyleSelect" class='select' onchange="changeWingModel(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Normal pegasus</option>
+				  <option value="4">Normal pegasus closed</option>
+				  <option value="2">Bat wing</option>
+				  <!--<option value="5">Bat wing closed</option>-->
+				  <option value="3">Large pegasus</option>
+				  <option value="6">Large pegasus closed</option>
+				  <option value="7">Aviator wing</option>
+				  <option value="8">Mech wing</option>
+				  <option value="10">Mech wing closed</option>
+				  <option value="9">Dragon wing</option>
+				  <option value="11">Chrysalis wing</option>
+				  <option value="12">Dark wing</option>
+				 <!-- <option value="13">Dark wing closed</option>-->
+				</select>
+				<br>
+				<input id="wingsColor1" class="color" value="8795CC"> 
+				<input id="wingsColor2" class="color" value="A3A3A3">
+				<input id="wingsColor3" class="color" value="FFCD69">
+				<br>
+				Wing size <br>
+				<input id="lWingSize" type="range" min="0.2" max="2" value="1" step="0.01" onchange="changeLeftWingSize(this.value)" />
+				<br>
+				<input id="rWingSize" type="range" min="0.2" max="2" value="1" step="0.01" onchange="changeRightWingSize(this.value)" />
+				<br>
+				<br>
+				
+				Teeth
+				<select id="teethSelect" class='select' onchange="changeTeeth(this.value)" >
+				  <!--<option value="0">None</option>-->
+				  <option value="1">Normal</option>
+				  <option value="2">Fangs</option>
+				</select>
+				<br>
+				<br>
+				
+				Cutie mark
+				<select id="cutieMarkSelect" name="cutieMarkSelect" class='select' onchange="changeCutieMark(this.value)" >
+				  <option selected value="0">None</option>
+				  <option value="500">Custom</option>
+				  <option value="1">Lyra</option>
+				  <option value="2">Bonbon</option>
+				  <option value="3">Octavia</option>
+				  <option value="4">Vinyl Scratch</option>
+				  <option value="5">Derpy</option>
+				  <option value="6">Aloe / Lotus</option>
+				  <option value="7">Berry Punch</option>
+				  <option value="8">Carrot Top</option>
+				  <option value="9">Cheerilee</option>
+				  <option value="10">Cloudchaser</option>
+				  <option value="11">Flitter</option>
+				  <option value="12">Lightning Dust</option>
+				  <option value="13">Nurse Redheart</option>
+				  <option value="14">Spitfire</option>
+				  <option value="15">Trixie</option>
+				  <option value="18">Applejack</option>
+				  <option value="19">Fluttershy</option>
+				  <option value="20">Pinkie Pie</option>
+				  <option value="21">Rainbow Dash</option>
+				  <option value="22">Rarity</option>
+				  <option value="23">Twilight</option>
+				  <option value="501">Apple Pie</option>
+				  <option value="502">Cherry Berry</option>
+				  <option value="503">Cherry Fuzzy</option>
+				  <option value="504">Cinnamon Swirl</option>
+				  <option value="505">Cloud Kicker</option>
+				  <option value="506">Deep Blue</option>
+				  <option value="507">Dizzy Twister</option>
+				  <option value="508">Green Jewel</option>
+				  <option value="509">Lemon Hearts</option>
+				  <option value="510">Lightning Bolt</option>
+				  <option value="511">Linked Hearts</option>
+				  <option value="512">Lucky Clover</option>
+				  <option value="513">Merry May</option>
+				  <option value="514">Parasol</option>
+				  <option value="515">Ponet</option>
+				  <option value="516">Rainbowshine</option>
+				  <option value="517">Sassaflash</option>
+				  <option value="518">Seaswirl</option>
+				  <option value="519">Tropical Spring</option>
+				  <option value="520">Trumpeter</option>
+				  <option value="521">Welly</option>
+				  <option value="522">Dr Whooves</option>
+				  <option value="523">Luna</option>
+				  <option value="524">Sunset Shimmer</option>
+				</select> 
+				<br>
+			
+				<!-- http://stackoverflow.com/questions/8595389/programmatically-trigger-select-file-dialog-box -->
+				<br>
+				<input type="button" value="Upload png file as cutie mark" onclick="$('#customCutieMark').click();" />
+				<br>
+
+				poseX
+				<input id="cutieMarkUt" type="range" min="0.0" max="1.0" value="0.5" step="0.001" onchange="changeCutieMarkUt(this.value)" />
+				<br>
+				poseY
+				<input id="cutieMarkVt" type="range" min="0.0" max="1.0" value="0.5" step="0.001" onchange="changeCutieMarkVt(this.value)" />
+				<br>
+				Rotate
+				<input id="cutieMarkRotation" type="range" min="0" max="360" value="0" step="1" onchange="changeCutieMarkRotation(this.value)" />
+				<br>
+				Scale
+				<input id="cutieMarkScale" type="range" min="10" max="20" value="10" step="0.1" onchange="changeCutieMarkScale(this.value)" />
+				<br>
+				Reverse
+				<input id="cutieMarkReverse" type="checkbox" value="0" />
+				<br>
+				
+				
+			</div>
+			
+			<div class="contenu" id="contenu_2">
+				
+				Collar / scarf
+				<select id="collar1Select" name="collar1Select" class='select' onchange="changeCollar1Model(this.value)">
+				  <option value="0">None</option>
+				  <option value="1">Spa necklace</option>
+				  <option value="2">Octavia's bowtie</option>
+				  <option value="6">Octavia's collar</option>
+				  <option value="3">Headphones</option>
+				  <option value="4">Coco Pommel's tie</option>
+				  <option value="7">Celestia's collar</option>
+				  <option value="8">Luna's collar</option>
+				  <option value="9">Cadance's collar</option>
+				  <option value="10">Dark collar</option>
+				  <option value="11">Element of honesty</option>
+				  <option value="12">Element of kindness</option>
+				  <option value="13">Element of laughter</option>
+				  <option value="14">Element of loyalty</option>
+				  <option value="15">Element of generosity</option>
+				  <option value="16">Scarf</option>
+				  <!--<option value="17">Ankh</option>-->
+				</select> 
+				<br>
+				<input id="collar1Color1" class="color" value="ffffff"> 
+				<input id="collar1Color2" class="color" value="2696cb">
+				<input id="collar1Color3" class="color" value="ede69a">
+				
+				<br>
+				<br>
+				Headgear
+				<select id="headgear1Select" name="headgear1Select" class='select' onchange="changeHeadgear1Model(this.value)" >
+					<option value="0">None</option>
+					<option value="1">Flitter's bow hair</option>
+					<option value="2">Applejack's hat</option>
+					<option value="3">Coco Pommel's hair clip</option>
+					<option value="4">Bee antennas</option>
+					<option value="5">Celestia's crown</option>
+					<option value="6">Luna's crown</option>
+					<option value="7">Cadance's crown</option>
+					<option value="8">Sunset Shimmer's crown</option>
+					<option value="9">Chrysalis crown</option>
+					<option value="10">Dark helm</option>
+					<option value="11">Element of magic</option>
+				</select> <br>
+				<input id="headgear1Color1" class="color" value="ffffff"> 
+				<input id="headgear1Color2" class="color" value="2696cb">
+				<input id="headgear1Color3" class="color" value="ede69a">
+				
+				<br>
+				<br>
+				Headband
+				<select id="headband0Select" name="headband0Select" class='select' onchange="changeHeadband0Model(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Solid's headband</option>
+				</select> 
+				<br>
+				<input id="headband0Color1" class="color" value="ffffff"> 
+				<input id="headband0Color2" class="color" value="2696cb">
+				<input id="headband0Color3" class="color" value="ede69a">
+				
+				<br>
+				<br>
+				Glasses
+				<select id="headband1Select" name="headband1Select" class='select' onchange="changeHeadband1Model(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Solid's eyepatch</option>
+				  <option value="2">Rarity's glasses</option>
+				  <option value="3">Vinyl's shades</option>
+				  <option value="4">Monocle</option>
+				  <option value="5">Round glasses</option>
+				</select> 
+				<br>
+				<input id="headband1Color1" class="color" value="ffffff"> 
+				<input id="headband1Color2" class="color" value="2696cb">
+				<input id="headband1Color3" class="color" value="ede69a">
+				<br>
+				<br>
+				
+				<!-- Bottom - Left - Back -->
+				Bottom leg <br>
+				<select id="misc1Select" class='select' onchange="changeAccessoryModel(this.value,1)" >
+				  <option value="0">None</option>
+				  <option value="2">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc1Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,1)"> 
+				<input id="misc1Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,1)">
+				<input id="misc1Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,1)">
+				<br>
+				<!-- Bottom - Left - Front -->
+				<select id="misc2Select" class='select' onchange="changeAccessoryModel(this.value,2)" >
+				  <option value="0">None</option>
+				  <option value="3">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc2Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,2)"> 
+				<input id="misc2Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,2)">
+				<input id="misc2Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,2)">
+				<br>
+				<!-- Bottom - Right - Back -->
+				<select id="misc3Select" class='select' onchange="changeAccessoryModel(this.value,3)" >
+				  <option value="0">None</option>
+				  <option value="4">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc3Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,3)"> 
+				<input id="misc3Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,3)">
+				<input id="misc3Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,3)">
+				<br>
+				<!-- Bottom - Right - Front -->
+				<select id="misc4Select" class='select' onchange="changeAccessoryModel(this.value,4)" >
+				  <option value="0">None</option>
+				  <option value="5">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc4Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,4)"> 
+				<input id="misc4Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,4)">
+				<input id="misc4Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,4)">
+				<br>
+				<br>
+				Top leg <br>
+				<!-- Top - Left - Back -->
+				<select id="misc5Select" class='select' onchange="changeAccessoryModel(this.value,5)" >
+				  <option value="0">None</option>
+				  <option value="6">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc5Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,5)"> 
+				<input id="misc5Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,5)">
+				<input id="misc5Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,5)">
+				<br>
+				<!-- Top - Left - Front -->
+				<select id="misc6Select" class='select' onchange="changeAccessoryModel(this.value,6)" >
+				  <option value="0">None</option>
+				  <option value="7">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc6Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,6)"> 
+				<input id="misc6Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,6)">
+				<input id="misc6Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,6)">
+				<br>
+				<!-- Top - Right - Back -->
+				<select id="misc7Select" class='select' onchange="changeAccessoryModel(this.value,7)" >
+				  <option value="0">None</option>
+				  <option value="8">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc7Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,7)"> 
+				<input id="misc7Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,7)">
+				<input id="misc7Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,7)">
+				<br>
+				<!-- Top - Right - Front -->
+				<select id="misc8Select" class='select' onchange="changeAccessoryModel(this.value,8)" >
+				  <option value="0">None</option>
+				  <option value="9">LegRing</option>
+				</select> 
+				<br>
+				<input id="misc8Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,8)"> 
+				<input id="misc8Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,8)">
+				<input id="misc8Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,8)">
+				<br>
+				<br>
+
+				Shoes <br>
+				<!-- Left - Back -->
+				<select id="misc9Select" class='select' onchange="changeAccessoryModel(this.value,9)" >
+				  <option value="0">None</option>
+				  <option value="10">Celestia's shoes</option>
+				  <option value="14">Luna's shoes</option>
+				  <option value="18">Dark shoes</option>
+				</select> 
+				<br>
+				<input id="misc9Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,9)"> 
+				<input id="misc9Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,9)">
+				<input id="misc9Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,9)">
+				<br>
+				<!-- Left - Front -->
+				<select id="misc10Select" class='select' onchange="changeAccessoryModel(this.value,10)" >
+				  <option value="0">None</option>
+				  <option value="11">Celestia's shoes</option>
+				  <option value="15">Luna's shoes</option>
+				  <option value="19">Dark shoes</option>
+				</select> 
+				<br>
+				<input id="misc10Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,10)"> 
+				<input id="misc10Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,10)">
+				<input id="misc10Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,10)">
+				<br>
+				<!-- Right - Back -->
+				<select id="misc11Select" class='select' onchange="changeAccessoryModel(this.value,11)" >
+				 <option value="0">None</option>				 
+				 <option value="12">Celestia's shoes</option>
+				  <option value="16">Luna's shoes</option>
+				  <option value="20">Dark shoes</option>
+				</select> 
+				<br>
+				<input id="misc11Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,11)"> 
+				<input id="misc11Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,11)">
+				<input id="misc11Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,11)">
+				<br>
+				<!-- Right - Front -->
+				<select id="misc12Select" class='select' onchange="changeAccessoryModel(this.value,12)" >
+				  <option value="0">None</option>
+				  <option value="13">Celestia's shoes</option>
+				  <option value="17">Luna's shoes</option>
+				  <option value="21">Dark shoes</option>
+				</select> 
+				<br>
+				<input id="misc12Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,12)"> 
+				<input id="misc12Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,12)">
+				<input id="misc12Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,12)">
+				<br>
+				<br>
+				
+				
+				Misc
+				<select id="misc0Select" class='select' onchange="changeAccessoryModel(this.value,0)" >
+				  <option value="0">None</option>
+				  <option value="1">Bee abdomen</option>
+				</select> 
+				<br>
+				<input id="misc0Color1" class="color" value="ffffff" onchange="changeAccessoryColor1(this,0)"> 
+				<input id="misc0Color2" class="color" value="2696cb" onchange="changeAccessoryColor2(this,0)">
+				<input id="misc0Color3" class="color" value="ede69a" onchange="changeAccessoryColor3(this,0)">
+				<br>
+			</div>
+			
+			<div class="contenu" id="contenu_3"> 
+
+				<!-- 
+					Facial expressions
+				-->
+				Facial expressions<br>
+				<br>
+				Eyes
+				<br>
+				<input id="rangeMorph1" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(1,this.value)" />l_angry<br>
+				<input id="rangeMorph2" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(2,this.value)" />r_angry<br>
+				<input id="rangeMorph3" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(3,this.value)" />l_sad<br>
+				<input id="rangeMorph4" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(4,this.value)" />r_sad<br>
+				<input id="rangeMorph5" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(5,this.value)" />l_relaxed<br>
+				<input id="rangeMorph6" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(6,this.value)" />r_relaxed<br>
+				<input id="rangeMorph7" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(7,this.value)" />l_wide<br>
+				<input id="rangeMorph8" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(8,this.value)" />r_wide<br>
+				<input id="rangeMorph9" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(9,this.value)" />l_lid_raise<br>
+				<input id="rangeMorph10" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(10,this.value)" />r_lid_raise<br>
+				<input id="rangeMorph11" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(11,this.value)" />l_lid_lowerer<br>
+				<input id="rangeMorph12" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(12,this.value)" />r_lid_lowerer<br>
+				<input id="rangeMorph13" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(13,this.value)" />l_eyebrow_lowerer<br>
+				<input id="rangeMorph14" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(14,this.value)" />r_eyebrow_lowerer<br>
+				<input id="rangeMorph15" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(15,this.value)" />l_happy<br>
+				<input id="rangeMorph16" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(16,this.value)" />r_happy<br>
+				<input id="rangeMorph17" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(17,this.value)" />eye_closer_left<br>
+				<input id="rangeMorph18" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(18,this.value)" />eye_closer_right<br>
+				
+				<br>
+				<br>
+				Mouth
+				<br>
+				<input id="rangeMorph19" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(19,this.value)" />jaw_open<br>
+				<input id="rangeMorph20" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(20,this.value)" />jaw_closer<br>
+				<input id="rangeMorph21" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(21,this.value)" />grin<br>
+				<input id="rangeMorph22" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(22,this.value)" />big_grin<br>
+				<input id="rangeMorph23" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(23,this.value)" />l_frown<br>
+				<input id="rangeMorph24" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(24,this.value)" />r_frown<br>
+				<input id="rangeMorph25" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(25,this.value)" />l_smirk<br>
+				<input id="rangeMorph26" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(26,this.value)" />r_smirk<br>
+				<input id="rangeMorph27" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(27,this.value)" />l_lip_down<br>
+				<input id="rangeMorph28" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(28,this.value)" />r_lip_down<br>
+				<input id="rangeMorph29" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(29,this.value)" />l_lip_up<br>
+				<input id="rangeMorph30" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(30,this.value)" />r_lip_up<br>
+				<input id="rangeMorph31" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(31,this.value)" />l_puckerer<br>
+				<input id="rangeMorph32" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(32,this.value)" />r_puckerer<br>
+				<input id="rangeMorph33" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(33,this.value)" />l_stretch<br>
+				<input id="rangeMorph34" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(34,this.value)" />r_stretch<br>
+				<input id="rangeMorph35" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(35,this.value)" />mouth_full<br>
+				<input id="rangeMorph36" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(36,this.value)" />mouth_angry<br>
+				<input id="rangeMorph37" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(37,this.value)" />mouth_neutral<br>
+				<input id="rangeMorph38" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(38,this.value)" />mouth_S<br>
+				<input id="rangeMorph39" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(39,this.value)" />mouth_O<br>
+				<!--<input id="rangeMorph40" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(40,this.value)" />mouth_o2<br>-->
+				<input id="rangeMorph41" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(41,this.value)" />lower_lip_out<br>
+				<!--<input id="rangeMorph42" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(42,this.value)" />lip_bite<br>-->
+				<input id="rangeMorph43" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(43,this.value)" />mouth_pucker<br>
+				<!--<input id="rangeMorph44" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(44,this.value)" />tongue_out<br>-->
+				<!--<input id="rangeMorph45" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(45,this.value)" />tongue_left<br>-->
+				<!--<input id="rangeMorph46" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(46,this.value)" />tongue_right<br>-->
+				<!--<input id="rangeMorph47" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(47,this.value)" />nose_wrinkle<br>-->
+				<!--<input id="rangeMorph48" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(48,this.value)" />tongue_up<br>-->
+				<!--<input id="rangeMorph49" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(49,this.value)" />tongue_down<br>-->
+
+				
+			</div>
+			
+			
+			<!-- 
+				Stickers
+			-->
+				
+			<div class="contenu" id="contenu_5">
+				
+				You have 8 slots to place your stickers.<br>
+				
+				<img id="stickerMini0" class="stickerMiniActive" onclick="changeCurrentStickerID(0)" src="img/blank.png" alt="0" /> 
+				<img id="stickerMini1" class="stickerMiniInactive" onclick="changeCurrentStickerID(1)" src="img/blank.png" alt="1" />
+				<img id="stickerMini2" class="stickerMiniInactive" onclick="changeCurrentStickerID(2)" src="img/blank.png" alt="2" />
+				<img id="stickerMini3" class="stickerMiniInactive" onclick="changeCurrentStickerID(3)" src="img/blank.png" alt="3" />
+				<img id="stickerMini4" class="stickerMiniInactive" onclick="changeCurrentStickerID(4)" src="img/blank.png" alt="4" />
+				<img id="stickerMini5" class="stickerMiniInactive" onclick="changeCurrentStickerID(5)" src="img/blank.png" alt="5" /> 
+				<img id="stickerMini6" class="stickerMiniInactive" onclick="changeCurrentStickerID(6)" src="img/blank.png" alt="6" /> 
+				<img id="stickerMini7" class="stickerMiniInactive" onclick="changeCurrentStickerID(7)" src="img/blank.png" alt="7" />
+				
+				<!-- 
+					Sticker images
+				-->
+				
+				<div class="stickerImgDiv">
+					<div>
+						<img id="blankStickerImg" alt="blank" class="stickerImgActive" src="js/stickers/blank.png" onclick="changeStickerImage(this)"/>
+						<img id="bolt" alt="bolt" class="stickerImgInactive" src="js/stickers/bolt.png" onclick="changeStickerImage(this)"/>
+						<img id="cookie_heart" alt="cookie_heart" class="stickerImgInactive" src="js/stickers/cookie_heart.png" onclick="changeStickerImage(this)"/>
+						
+					</div>
+					<div>
+						
+						<img id="mushroom" alt="mushroom" style="display:none" src="js/stickers/mushroom.png" />
+						<img id="triple_hearts" alt="triple_hearts" class="stickerImgInactive" src="js/stickers/triple_hearts.png"  onclick="changeStickerImage(this)"/>
+						<img id="star" alt="star" class="stickerImgInactive" src="js/stickers/star.png"  onclick="changeStickerImage(this)"/>
+						<img id="cupcake" alt="cupcake" class="stickerImgInactive" src="js/stickers/cupcake.png"  onclick="changeStickerImage(this)"/>
+						
+					</div>
+					<div>
+						<img id="fire_flower" alt="fire_flower" style="display:none" src="js/stickers/fire_flower.png" />
+						<img id="diamond" alt="diamond" class="stickerImgInactive" src="js/stickers/diamond.png"  onclick="changeStickerImage(this)"/>
+						<img id="ribbon" alt="ribbon" class="stickerImgInactive" src="js/stickers/ribbon.png"  onclick="changeStickerImage(this)"/>
+						<img id="splatter" alt="splatter" class="stickerImgInactive" src="js/stickers/splatter.png"  onclick="changeStickerImage(this)"/>
+
+					</div>
+					
+					<div>
+						<img id="freckles" alt="freckles" style="display:none"  src="js/stickers/freckles.png" />
+						<img id="freckles2" alt="freckles2" class="stickerImgInactive" src="js/stickers/freckles2.png"  onclick="changeStickerImage(this)"/>
+						<img id="scar1" alt="scar1" class="stickerImgInactive" src="js/stickers/scar1.png"  onclick="changeStickerImage(this)"/>
+						<img id="scar2" alt="scar2" class="stickerImgInactive" src="js/stickers/scar2.png"  onclick="changeStickerImage(this)"/>
+					</div>
+					<div>
+						<img id="rainbow" alt="rainbow" class="stickerImgInactive" src="js/stickers/rainbow.png"  onclick="changeStickerImage(this)"/>
+						<img id="crescent_moon" alt="crescent_moon" class="stickerImgInactive" src="js/stickers/crescent_moon.png"  onclick="changeStickerImage(this)"/>
+
+					</div>
+					<div>
+						<img id="blush" alt="blush" class="stickerImgInactive" src="js/stickers/blush.png"  onclick="changeStickerImage(this)"/>
+						<img id="blush_2" alt="blush_2" class="stickerImgInactive" src="js/stickers/blush_2.png"  onclick="changeStickerImage(this)"/>
+
+					</div>
+				</div>
+				
+				<!-- 
+					Sticker options
+				-->
+				
+				<br>
+				Enable "edit mode" to move a sticker freely.
+				Once enabled, place the cursor on your pony, and press "Enter" to validate.
+				<input id="stickerEditModeButton" class="editModeDisabled" type="button" value="Edit mode disabled" />
+				
+				<br>
+				<br>
+				Rotate
+				<input id="stickerRotation" type="range" min="0" max="360" value="0" step="1" onchange="changeStickerRotation(this.value)" />
+				<br>
+				Scale
+				<input id="stickerScale" type="range" min="5" max="12" value="5" step="0.1" onchange="changeStickerScale(this.value)" />
+				<br>
+				Reverse sticker
+				<input id="stickerReverse" type="checkbox" value="0" />
+				<br>
+			</div>
+			
+			
+			<!-- 
+				Light
+			-->
+				
+			<div class="contenu" id="contenu_6">
+				<b>Shading</b>
+				<select id="shadingSelect" class='select' onchange="changeShading(this.value)" >
+					<option selected value="1">Simple</option>
+					<option value="2">Toon</option>
+				</select>
+			
+				<br>
+				<br>
+				<b>Advanced</b> stuff for light.
+				<br>
+				Works only for <b>Simple Shading</b>.
+				<br>
+				<br>
+				Try to find the best combination.
+				<br>
+				Tip : values can go negative.
+				<br>
+				<br>
+				Examples
+				<br>
+				<input type="button" value="Default 1" onclick="setDefaultLight()" />
+				<input type="button" value="Default 2" onclick="setDefault2Light()" />
+				<input type="button" value="Shiny" onclick="setShinyLight()" />
+				<br>
+				<br>
+				Ambiant <input id="aLight0r" value="0.4" style="width: 40px; background-color:#FAA;" onchange="changeLight()" /> 
+				<input id="aLight0g" value="0.4" style="width: 40px; background-color:#AFA" onchange="changeLight()" /> 
+				<input id="aLight0b" value="0.4" style="width: 40px; background-color:#AAF" onchange="changeLight()" /> 
+				<br>usually between 0-1
+				<br>
+				
+				<br>
+				Diffuse <input id="dLight0r" value="0.4" style="width: 40px; background-color:#FAA;" onchange="changeLight()" /> 
+				<input id="dLight0g" value="0.4" style="width: 40px; background-color:#AFA;" onchange="changeLight()" /> 
+				<input id="dLight0b" value="0.4" style="width: 40px; background-color:#AAF;" onchange="changeLight()" /> 
+				<br>usually between 0-1
+				<br>
+				
+				<br>
+				Specular <input id="sLight0r" value="0.25" style="width: 40px; background-color:#FAA;" onchange="changeLight()" /> 
+				<input id="sLight0g" value="0.25" style="width: 40px; background-color:#AFA;" onchange="changeLight()" /> 
+				<input id="sLight0b" value="0.25" style="width: 40px; background-color:#AAF;" onchange="changeLight()" /> 
+				<br>usually between 0-1
+				<br>
+				
+				<br>
+				Shininess <input id="shininess" value="1" style="width: 40px;" onchange="changeShininess(this.value)" /> 
+				<br>usually between 0-50
+				<br>
+				
+				
+			</div>
+			
+			
+			<!-- 
+				Pose 
+			-->
+			<div class="contenu" id="contenu_7">
+			
+				<!--  Angles in degrees : x, y, z-->
+				Examples
+				<br>
+				<input type="button" value="Default" onclick="changePose1()" /> 
+				<input type="button" value="Sit" onclick="changePose2()" /> 
+				<input type="button" value="Brohoof" onclick="changePose3()" /> 
+				<br>
+				<br>
+				<input id="joint0button" type="button" value="Reference" onclick="changePose(0)" /> 
+				<input id="joint0rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,0)" /> 
+				<input id="joint0rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,0)" /> 
+				<input id="joint0rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,0)" /> 
+				<br>
+				<input id="joint1button" type="button" value="Pelvis" onclick="changePose(1)" /> 
+				<input id="joint1rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,1)" /> 
+				<input id="joint1rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,1)" /> 
+				<input id="joint1rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,1)" /> 
+				<br>
+				<input id="joint2button" type="button" value="Chest 1" onclick="changePose(2)" /> 
+				<input id="joint2rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,2)" /> 
+				<input id="joint2rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,2)" /> 
+				<input id="joint2rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,2)" /> 
+				<br>
+				<input id="joint3button" type="button" value="Chest 2" onclick="changePose(3)" /> 
+				<input id="joint3rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,3)" /> 
+				<input id="joint3rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,3)" /> 
+				<input id="joint3rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,3)" /> 
+				<br>
+				<input id="joint4button" type="button" value="Neck" onclick="changePose(4)" /> 
+				<input id="joint4rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,4)" /> 
+				<input id="joint4rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,4)" /> 
+				<input id="joint4rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,4)" /> 
+				<br>
+				<input id="joint5button" type="button" value="Head" onclick="changePose(5)" /> 
+				<input id="joint5rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,5)" /> 
+				<input id="joint5rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,5)" /> 
+				<input id="joint5rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,5)" /> 
+				<br>
+				<input id="joint6button" type="button" value="Right Ear" onclick="changePose(6)" /> 
+				<input id="joint6rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,6)" /> 
+				<input id="joint6rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,6)" /> 
+				<input id="joint6rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,6)" /> 
+				<br>
+				<input id="joint7button" type="button" value="Left Ear" onclick="changePose(7)" /> 
+				<input id="joint7rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,7)" /> 
+				<input id="joint7rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,7)" /> 
+				<input id="joint7rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,7)" /> 
+				<br>
+				<input id="joint8button" type="button" value="Right Shoulder" onclick="changePose(8)" /> 
+				<input id="joint8rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,8)" /> 
+				<input id="joint8rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,8)" /> 
+				<input id="joint8rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,8)" /> 
+				<br>
+				<input id="joint9button" type="button" value="Right Forearm" onclick="changePose(9)" /> 
+				<input id="joint9rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,9)" /> 
+				<input id="joint9rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,9)" /> 
+				<input id="joint9rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,9)" /> 
+				<br>
+				<input id="joint10button" type="button" value="Right Hand" onclick="changePose(10)" /> 
+				<input id="joint10rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,10)" /> 
+				<input id="joint10rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,10)" /> 
+				<input id="joint10rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,10)" /> 
+				<br>
+				<input id="joint11button" type="button" value="Right Ball" onclick="changePose(11)" /> 
+				<input id="joint11rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,11)" /> 
+				<input id="joint11rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,11)" /> 
+				<input id="joint11rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,11)" /> 
+				<br>
+				<input id="joint12button" type="button" value="Left Shoulder" onclick="changePose(12)" /> 
+				<input id="joint12rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,12)" /> 
+				<input id="joint12rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,12)" /> 
+				<input id="joint12rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,12)" /> 
+				<br>
+				<input id="joint13button" type="button" value="Left Forearm" onclick="changePose(13)" /> 
+				<input id="joint13rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,13)" /> 
+				<input id="joint13rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,13)" /> 
+				<input id="joint13rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,13)" /> 
+				<br>
+				<input id="joint14button" type="button" value="Left Hand" onclick="changePose(14)" /> 
+				<input id="joint14rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,14)" /> 
+				<input id="joint14rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,14)" /> 
+				<input id="joint14rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,14)" /> 
+				<br>
+				<input id="joint15button" type="button" value="Left Ball" onclick="changePose(15)" /> 
+				<input id="joint15rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,15)" /> 
+				<input id="joint15rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,15)" /> 
+				<input id="joint15rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,15)" /> 
+				<br>
+				<input id="joint16button" type="button" value="Right Thigh" onclick="changePose(16)" /> 
+				<input id="joint16rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,16)" /> 
+				<input id="joint16rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,16)" /> 
+				<input id="joint16rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,16)" /> 
+				<br>
+				<input id="joint17button" type="button" value="Right Leg 1" onclick="changePose(17)" /> 
+				<input id="joint17rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,17)" /> 
+				<input id="joint17rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,17)" /> 
+				<input id="joint17rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,17)" /> 
+				<br>
+				<input id="joint18button" type="button" value="Right Leg 2" onclick="changePose(18)" /> 
+				<input id="joint18rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,18)" /> 
+				<input id="joint18rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,18)" /> 
+				<input id="joint18rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,18)" /> 
+				<br>
+				<input id="joint19button" type="button" value="Right Foot" onclick="changePose(19)" /> 
+				<input id="joint19rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,19)" /> 
+				<input id="joint19rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,19)" /> 
+				<input id="joint19rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,19)" /> 
+				<br>
+				<input id="joint20button" type="button" value="Left Thigh" onclick="changePose(20)" /> 
+				<input id="joint20rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,20)" /> 
+				<input id="joint20rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,20)" /> 
+				<input id="joint20rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,20)" /> 
+				<br>
+				<input id="joint21button" type="button" value="Left Leg 1" onclick="changePose(21)" /> 
+				<input id="joint21rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,21)" /> 
+				<input id="joint21rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,21)" /> 
+				<input id="joint21rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,21)" /> 
+				<br>
+				<input id="joint22button" type="button" value="Left Leg 2" onclick="changePose(22)" /> 
+				<input id="joint22rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,22)" /> 
+				<input id="joint22rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,22)" /> 
+				<input id="joint22rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,22)" /> 
+				<br>
+				<input id="joint23button" type="button" value="Left Foot" onclick="changePose(23)" /> 
+				<input id="joint23rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,23)" /> 
+				<input id="joint23rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,23)" /> 
+				<input id="joint23rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,23)" /> 
+				<br>
+				<input id="joint24button" type="button" value="Tail" onclick="changePose(24)" /> 
+				<input id="joint24rotateX" value="0" class="inputPose" onchange="rotateXJoint(this,24)" /> 
+				<input id="joint24rotateY" value="0" class="inputPose" onchange="rotateYJoint(this,24)" /> 
+				<input id="joint24rotateZ" value="0" class="inputPose" onchange="rotateZJoint(this,24)" /> 
+				<br>
+				<br>
+				<span style="font-size: 14px; color:red"> Some wing and tail poses are instable / bugged.</span>
+				<br>
+				<br><div id="tailPosDiv"></div>
+				<br><div id="lWingPosDiv"></div>
+				<br><div id="rWingPosDiv"></div>
+				<br>
+							
+
+			</div>
+			
+			<div class="contenu" id="contenu_4">
+				
+				<button id="buttonPrintCanvasID2" type="submit" value="Download picture" onclick="buttonPrintCanvas()">
+				  <span style="font-size: 16px;"> Download picture </span>
+				  <img src="img/download_icon.png" alt="dl"/>
+				</button>
+				<br>
+				<button id="downloadOBJID" type="submit" value="Download obj" onclick="downloadOBJ()">
+				  <span style="font-size: 16px;"> Download 3d model (.obj) </span>
+				  <img src="img/download_icon.png" alt="dl"/>
+				</button>
+				<br>
+				<button id="downloadSMDID" type="submit" value="Download smd" onclick="downloadSMD()">
+				  <span style="font-size: 16px;"> Download 3d model (.smd) </span>
+				  <img src="img/download_icon.png" alt="dl"/>
+				</button>
+				warning : smd file is large and the download can take few seconds.
+				<br>
+				
+				<br>
+				<button id="download_ponySave_id" type="submit" value="download ponySave" onclick="downloadPonySave()">
+				  <span style="font-size: 16px;"> Download ponySave </span>
+				  <img src="img/download_icon.png" alt="dl"/>
+				</button>
+				<br>
+				<button id="import_ponySave_id" value="Import ponySave" onclick="$('#importPonySaveID2').click();"> 
+				  <span style="font-size: 16px;"> Import ponySave </span>
+				</button>
+				<br>
+				<br>
+				
+				You can save a maximum of 20 ponies.
+				<br>
+				<p style='color:#EE3333;'> This game use cookies to save ponies locally in your browser.
+				
+				If you clear your cookies, you will lose your ponies. 
+				
+				For more safety, use the "Download ponySave" button just above. </p>
+				<br>
+				Pony's name    
+				<input id="ponyName" value="" placeholder="Coco Pommel" /> 
+				<br>
+				<input id="buttonSaveNewPony" type="button" value=" Save pony in a new file" onclick="saveNewPony()" />
+				<br>
+				<br>
+				<br>
+				<!-- 
+					If you save in this file, your old pony will be lost forever.
+				-->
+				
+			</div>
+
+			<div class="contenu" id="contenu_8">
+				<!-- 
+					Extras
+				-->
+				
+				Animation mode
+				<select class='select' onchange="changetex1MoveMode(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1" selected >Mode 1</option>
+				  <option value="2">Mode 2</option>
+				</select> 	<br>	
+				<br>
+				
+				Front hair
+				<select id="tex1_hairfront" class='select' onchange="changeTexture1(this.value,hairFront)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> 	<br>		
+				intensity <input id="tex1sat_hairfront" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,hairFront)" /><br>
+				alpha <input id="tex1alpha_hairfront" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,hairFront)" />
+				<br>
+				
+				
+				Back hair
+				<select id="tex1_hairback" class='select' onchange="changeTexture1(this.value,hairBack)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> <br>				
+				intensity <input id="tex1sat_hairback" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,hairBack)" /><br>
+				alpha <input id="tex1alpha_hairback" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,hairBack)" />
+				<br>
+				
+				
+				Tail
+				<select id="tex1_tail" class='select' onchange="changeTexture1(this.value,tail)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> <br>
+				intensity <input id="tex1sat_tail" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,tail)" /><br>
+				alpha <input id="tex1alpha_tail" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,tail)" />
+				<br>
+				
+				
+				Horn
+				<select id="tex1_horn" class='select' onchange="changeTexture1(this.value,horn)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> <br>	
+				intensity <input id="tex1sat_horn" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,horn)" /><br>
+				alpha <input id="tex1alpha_horn" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,horn)" />
+				<br>
+				
+				
+				Left Wing
+				<select id="tex1_lwing" class='select' onchange="changeTexture1(this.value,leftWing)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> 	<br>	
+				intensity <input id="tex1sat_lwing" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,leftWing)" />	<br>			
+				alpha <input id="tex1alpha_lwing" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,leftWing)" />
+				<br>
+				
+				
+				
+				Right Wing
+				<select id="tex1_rwing" class='select' onchange="changeTexture1(this.value,rightWing)" >
+				  <option value="0">None</option>
+				  <option value="1">Extra colors</option>
+				</select> 	<br>
+				intensity <input id="tex1sat_rwing" type="range" min="0" max="2" value="0.7" step="0.01" onchange="changeTex1Sat(this.value,rightWing)" />	<br>							
+				alpha <input id="tex1alpha_rwing" type="range" min="0" max="1" value="1" step="0.01" onchange="changeTex1Alpha(this.value,rightWing)" />
+				<br>
+				
+			</div> 
+			
+			
+			<div class="contenu" id="contenu_9">
+			Ears
+				<select id="earSelect" class='select' onchange="changeEar(this.value)" >
+				  <option value="0">Normal</option>
+				  <option value="1">Spikes</option>
+				  <option value="2">Star shaped</option>
+				</select>
+				<br>
+				Ear size<input id="rangeMorph53" type="range" min="-0.6" max="1.5" value="0" step="0.01" onchange="changeMorphValue(53,this.value)" />
+				<br>				
+				<br>
+				
+				Eyes
+				<select id="lEyeSelect" class='select' onchange="_changelEye(this.value)" >
+				  <option value="0">Normal 1</option>
+				  <option value="27">Normal 2</option>
+				  <option value="28">Normal 3</option>
+				  <option value="29">Normal 4</option>
+				  <option value="30">Normal young</option> 
+				  <option value="1">Bat 1</option>
+				  <option value="17">Bat 2</option>
+				  <option value="18">Bat 3</option>
+				  <option value="19">Bat 4</option>
+				  <option value="20">Bat young</option>
+				  <option value="22">Crystal 1</option>
+				  <option value="23">Crystal 2</option>
+				  <option value="24">Crystal 3</option>
+				  <option value="25">Crystal young</option>
+				  <option value="2">Snowdrop</option>
+				  <option value="31">Snowdrop 2</option>
+				  <option value="3">Love potion</option>
+				  <option value="13">Love potion 2</option>
+				  <option value="4">Heart</option>
+				  <option value="12">Heart 2</option>
+				  <option value="5">Chrysalis</option>
+				  <option value="21">Chrysalis 2</option>
+				  <option value="36">Chrysalis 3</option>
+				  <option value="6">Changeling</option>
+				  <option value="9">Changeling 2</option>
+				  <option value="7">Dragon</option>
+				  <option value="26">Dragon 2</option>
+				  <option value="8">Mane-iac</option>
+				  <option value="10">Cow</option>
+				  <option value="32">Dog</option>
+				  <option value="11">Discord</option>
+				  <option value="14">Mad</option>
+				  <option value="15">Mad 2</option>
+				  <option value="16">Round</option>
+				  <option value="33">Gummy</option>
+				  <option value="34">Rainbow</option>
+				  <option value="35">Nightmare moon</option>
+				  <option value="37">Mecha</option>
+				</select> 
+				<select id="rEyeSelect" class='select' onchange="_changerEye(this.value)" >
+				  <option value="0">Normal 1</option>
+				  <option value="27">Normal 2</option>
+				  <option value="28">Normal 3</option>
+				  <option value="29">Normal 4</option>
+				  <option value="30">Normal young</option> 
+				  <option value="1">Bat 1</option>
+				  <option value="17">Bat 2</option>
+				  <option value="18">Bat 3</option>
+				  <option value="19">Bat 4</option>
+				  <option value="20">Bat young</option>
+				  <option value="22">Crystal 1</option>
+				  <option value="23">Crystal 2</option>
+				  <option value="24">Crystal 3</option>
+				  <option value="25">Crystal young</option>
+				  <option value="2">Snowdrop</option>
+				  <option value="31">Snowdrop 2</option>
+				  <option value="3">Love potion</option>
+				  <option value="13">Love potion 2</option>
+				  <option value="4">Heart</option>
+				  <option value="12">Heart 2</option>
+				  <option value="5">Chrysalis</option>
+				  <option value="21">Chrysalis 2</option>
+				  <option value="36">Chrysalis 3</option>
+				  <option value="6">Changeling</option>
+				  <option value="9">Changeling 2</option>
+				  <option value="7">Dragon</option>
+				  <option value="26">Dragon 2</option>
+				  <option value="8">Mane-iac</option>
+				  <option value="10">Cow</option>
+				  <option value="32">Dog</option>
+				  <option value="11">Discord</option>
+				  <option value="14">Mad</option>
+				  <option value="15">Mad 2</option>
+				  <option value="16">Round</option>
+				  <option value="33">Gummy</option>
+				  <option value="34">Rainbow</option>
+				  <option value="35">Nightmare moon</option>
+				  <option value="37">Mecha</option>
+				</select> 
+				<br>
+				
+				<input id="matchEyesStyle" type="checkbox" checked="checked" value="0" />Match eyes style
+				<br>
+				<br>
+				
+				Left eye <input id="leftEyeColor" class="color" value="90ff80"> <input id="leftEyeColor2" class="color" value="ffffff">
+				<br>
+				<input id="txlEye" type="range" min="-0.5" max="0.5" value="0" step="0.002" /> poseX
+				<br>
+				<input id="tylEye" type="range" min="-0.5" max="0.5" value="0" step="0.002" /> poseY
+				<br>
+				<input id="slEye" type="range" min="0.5" max="2" value="1" step="0.01" /> size
+				<br>
+				
+				Right eye <input id="rightEyeColor" class="color" value="90ff80"> <input id="rightEyeColor2" class="color" value="ffffff">
+				<br>
+				<input id="txrEye" type="range" min="-0.5" max="0.5" value="0" step="0.002" /> poseX
+				<br>
+				<input id="tyrEye" type="range" min="-0.5" max="0.5" value="0" step="0.002" /> poseY
+				<br>
+				<input id="srEye" type="range" min="0.5" max="2" value="1" step="0.01" /> size
+				<br>
+				
+				<input id="matchEyesColor" type="checkbox" value="0" />Match eyes color
+				<br>
+				
+				<input id="enableEyeMovement" type="checkbox" checked="checked" value="0" />Eyes follow mouse
+				<br>
+				<br>
+				
+				Eyelashes
+				<select id="EyelashesSelect" class='select' onchange="changeEyelashes(this.value)" >
+				  <option value="0">None</option>
+				  <option selected value="1">Normal eyelashes</option>
+				  <option value="2">Fluttershy eyelashes</option>
+				  <option value="3">Rarity eyelashes</option>
+				</select> 
+				<br>
+				<input id="rangeMorph59" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(59,this.value)" />Fluttershy eye shape<br>
+				<input id="rangeMorph60" type="range" min="0" max="1" value="0" step="0.01" onchange="changeMorphValue(60,this.value)" />Rarity eye shape<br>
+				<br>
+			</div>
+				
+			<div class="contenu" id="contenu_10">
+
+				Front hair
+				<select id="hairFrontStyleSelect" name="hairFrontStyleSelect" class='select' onchange="changeHairFrontModel(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Lyra</option>
+				  <option value="2">Bonbon</option>
+				  <option value="3">Octavia</option>
+				  <option value="4">Vinyl Scratch</option>
+				  <option value="5">Derpy</option>
+				  <option value="6">Aloe / Lotus</option>
+				  <option value="7">Berry Punch</option>
+				  <option value="8">Carrot Top</option>
+				  <option value="9">Cheerilee</option>
+				  <option value="10">Cloudchaser</option>
+				  <option value="11">Flitter</option>
+				  <option value="12">Lightning Dust</option>
+				  <option value="13">Nurse Redheart</option>
+				  <option value="14">Spitfire</option>
+				  <option value="15">Trixie</option>
+				  <option value="16">Pinkamena</option>
+				  <option value="17">Solid Sparkle</option>
+				  <option value="18">Applejack</option>
+				  <option value="19">Fluttershy</option>
+				  <option value="20">Pinkie Pie</option>
+				  <option value="21">Rainbow Dash</option>
+				  <option value="22">Rarity</option>
+				  <option value="23">Twilight</option>
+				  <option value="24">Coco Pommel</option>
+				  <option value="25">Celestia</option>
+				  <option value="26">Luna Season 1</option>
+				  <option value="45">Luna Season 2</option>
+				  <option value="27">Cadance</option>
+				  <option value="28">Wet mane</option>
+				  <option value="30">Braeburn</option>
+				  <option value="31">Caramel</option>
+				  <option value="32">Nightlight</option>
+				  <option value="33">Noteworthy</option>
+				  <option value="34">Pokeypierce</option>
+				  <option value="35">Soarin</option>
+				  <option value="36">Thunderlane</option>
+				  <option value="37">Dr Whooves</option>
+				  <!-- <option value="38">Chrysalis</option>-->
+				  <option value="39">Applebloom</option>
+				  <option value="40">Scootaloo</option>
+				  <option value="41">Sweetie Belle</option>
+				  <option value="43">Sunset Shimmer</option>
+				  <option value="44">Big Mac</option>
+				  <option value="46">Fleur de Lis</option>
+				  <option value="29">Flutterbat</option>
+				</select><br>
+				<input id="hairFrontColor1" class="color" value="3DC4B7"> 
+				<input id="hairFrontColor2" class="color" value="A3A3A3">
+				<input id="hairFrontColor3" class="color" value="FFCD69" style="display:none">
+				<br>
+				<br>
+				
+				Back hair
+				<select id="hairBackStyleSelect" name="hairBackStyleSelect" class='select' onchange="changeHairBackModel(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Lyra</option>
+				  <option value="2">Bonbon</option>
+				  <option value="5">Derpy</option>
+				  <option value="6">Aloe / Lotus</option>
+				  <option value="9">Cheerilee</option>
+				  <option value="10">Cloudchaser</option>
+				  <option value="13">Nurse Redheart</option>
+				  <option value="15">Trixie</option>
+				  <option value="16">Pinkamena</option>
+				  <option value="17">Solid Sparkle</option>
+				  <option value="18">Applejack</option>
+				  <option value="19">Fluttershy</option>
+				  <option value="21">Rainbow Dash</option>
+				  <option value="22">Rarity</option>
+				  <option value="23">Twilight</option>
+				  <option value="24">Coco Pommel</option>
+				  <option value="26">Luna Season 1</option>
+				  <option value="27">Cadance</option>
+				  <option value="28">Wet mane</option>
+				  <option value="30">Braeburn</option>
+				  <option value="33">Noteworthy</option>
+				  <option value="39">Applebloom</option>
+				  <option value="40">Scootaloo</option>
+				  <option value="41">Sweetie Belle</option>
+				  <option value="43">Sunset Shimmer</option>
+				  <option value="44">Big Mac</option>
+				  <option value="46">Fleur de Lis</option>
+				  <option value="29">Flutterbat</option>
+				</select>
+				<br>
+				<input id="hairBackColor1" class="color" value="3DC4B7"> 
+				<input id="hairBackColor2" class="color" value="A3A3A3">
+				<input id="hairBackColor3" class="color" value="FFCD69" style="display:none">
+				<br>
+				<br>
+				
+				Tail
+				<select id="tailStyleSelect" name="tailStyleSelect" class='select' onchange="changeTailModel(this.value)" >
+				  <option value="0">None</option>
+				  <option value="1">Lyra</option>
+				  <option value="2">Bonbon</option>
+				  <option value="3">Octavia</option>
+				  <option value="4">Vinyl Scratch</option>
+				  <option value="5">Derpy</option>
+				  <option value="6">Aloe / Lotus</option>
+				  <option value="7">Berry Punch</option>
+				  <option value="8">Carrot Top</option>
+				  <option value="9">Cheerilee</option>
+				  <option value="10">Cloudchaser</option>
+				  <option value="11">Flitter</option>
+				  <option value="12">Lightning Dust</option>
+				  <option value="13">Nurse Redheart</option>
+				  <option value="14">Spitfire</option>
+				  <option value="15">Trixie</option>
+				  <option value="16">Pinkamena</option>
+				  <option value="18">Applejack</option>
+				  <option value="19">Fluttershy</option>
+				  <option value="20">Pinkie Pie</option>
+				  <option value="21">Rainbow Dash</option>
+				  <option value="42">Rainbow Dash 2</option>
+				  <option value="22">Rarity</option>
+				  <option value="23">Twilight</option>
+				  <option value="25">Celestia</option>
+				  <option value="45">Luna Season 2</option>
+				  <option value="27">Cadance</option>
+				  <option value="28">Wet tail</option>
+				  <option value="30">Braeburn</option>
+				  <option value="31">Caramel</option>
+				  <option value="32">Nightlight</option>
+				  <option value="34">Pokeypierce</option>
+				  <option value="35">Soarin</option>
+				  <option value="36">Thunderlane</option>
+				  <option value="37">Dr Whooves</option>
+				  <!-- <option value="38">Chrysalis</option>-->
+				  <option value="39">Applebloom</option>
+				  <option value="40">Scootaloo</option>
+				  <option value="41">Sweetie Belle</option>
+				  <option value="43">Sunset Shimmer</option>
+				  <option value="44">Big Mac</option>
+				  <option value="46">Fleur de Lis</option>
+				  <option value="29">Flutterbat</option>
+				</select>
+				<br>
+				<input id="tailColor1" class="color" value="3DC4B7"> 
+				<input id="tailColor2" class="color" value="A3A3A3">
+				<input id="tailColor3" class="color" value="FFCD69" style="display:none">
+				<br>
+				<input id="matchManeTailColor" type="checkbox" value="0" />Match mane and tail colors
+				<br>
+				
+				Tail size <br>
+				<input id="tailSize" type="range" min="0.2" max="2" value="1" step="0.01" onchange="changeTailSize(this.value)" />
+				<br>
+				<br>
+			</div>
+			
+		</td>
+	  </tr>
+	</table> 
+	
+
+	
+	
+
+	<!-- bottom part : ads - infos - credits - etc -->
+	<div class="bottom-aera">
+		<div class="bottom-aera-left">
+			
+			<!-- version - credits - etc -->
+		
+				
+				<div class="block-info-left">
+					<b class="headwarning"> If the game is not loading correctly or is running slow, try to use a different browser. </b>
+				</div>
+				
+				<div class="block-info-left">
+				
+				
+				<h3>Version v.1.1.9</h3>
+					<p>				
+						Fix for transparent wings.<br>
+						<a style="font-size:0.85em;" href="http://ponylumen.net/games/3d-pony-creator/changelog.txt" target="_blank">full changelog</a>
+						
+					</p>
+					
+					 
+				</div>
+
+
+				
+				<div class="block-info-left">
+					<h3>F.A.Q </h3>
+					<p>
+					<b>Pictures of ponies made with this site are free to use. </b><br>
+					<b>Yes, you can sell ponies for points on Deviantart. </b><br>
+					Credit to me (PonyLumen) or this site is appreciated, but not mandatory.<br>
+					<br><br>
+					<b>The game / pony doesn't load, what do ?</b><br>
+					Try different browsers. The most stable browsers are Chrome, Firefox, and Opera.
+					If some manes or tails don't appear, try to reboot your computer.
+					<br><br><br>
+						
+					<b>How to report a bug</b>
+					<br>Send me a message with those informations :
+					<br>- what is the problem? Please be as accurate as possible. 
+					<br>- how does the bug appear? (Always, when you press a specific button, etc)
+					<br>- what is your OS? (Windows 7, Linux, etc)
+					<br>- what is you browser?
+					<!--<br>- what is your graphic card? (Nvidia, AMD, etc)-->
+					<br>If you can take a screenshot, that's even better.<br><br>
+					
+					You can report bugs here
+					<a href="http://ponylumen.deviantart.com/journal/F-A-Q-about-bugs-errors-435012726"> F.A.Q about bug / errors</a> or send me an email at ponylumen@gmail.com.
+					</p>
+				</div>
+				
+				<div class="block-info-left">
+					<h3>Hot links</h3>
+					<a href="http://ponylumen.deviantart.com/journal/3D-Pony-Creator-suggestions-439003277"> If you have suggestions </a><br>
+					<a href="http://ponylumen-creations.deviantart.com/gallery/48362931"> Mane6 patterns and more</a><br>
+					<br>
+					<br>
+					<b>Tons of pony models for SFM</b>
+					<br><br>
+					<a href="http://poninnahka.deviantart.com/art/Pony-Overhaul-Females-Release-357693278"> Pony Overhaul: Females by Poninnahka </a><br>
+					<a href="http://ponysfm.com"> ponysfm.com </a><br>
+					<a href="http://sfm-ponies.deviantart.com"> sfm-ponies deviantart group </a><br>
+
+					<br><br>
+					<b>Pony models : source files</b>
+					<br><br>
+					<a href="http://poninnahka.deviantart.com/art/Overhaul-Pony-Source-Files-358713419"> Pony models : source files (smd) </a><br>
+					<a href="http://steamreview.org/BlenderSourceTools/"> Blender plugin for exporting/importing smd files </a><br>
+					<a href="http://www.wunderboy.org/apps/smdimport.php"> 3DSmax plugin for exporting/importing smd files </a><br>
+					<a href="https://developer.valvesoftware.com/wiki/Maya"> Maya plugin for exporting/importing smd files</a><br>	
+				</div>
+				
+				<br>
+				<br>
+				
+			
+				
+		</div>
+			
+		<div class="bottom-aera-right">
+			
+			 
+			<!-- F.A.Q -->
+			
+			<div class="block-info-right">
+				<h3>Credits</h3>
+				<div class="smallfont">
+					<p>
+					3D models <br>
+					<a href="http://poninnahka.deviantart.com/art/Pony-Overhaul-Females-Release-357693278" target="_blank">Poninnahka</a>,
+					<a href="http://chiramii-chan.deviantart.com/" target="_blank">Chiramii-chan</a>,
+					<a href="http://postal-code.deviantart.com/art/DL-Coco-Pommel-v1-5-425444661" target="_blank">Postal-Code</a>,
+					<a href="http://benja020.deviantart.com/art/MLP-FiM-Red-Dragon-3D-357337893" target="_blank">Benja020</a>,
+					<a href="http://gonzalolog.deviantart.com/art/Cadence-Download-322962464" target="_blank">Gonzalolog</a>,
+					<a href="http://commanderjackshit.deviantart.com/art/CMC-Overhaul-Fixed-Download-371203985"	target="_blank">Commanderjackshit</a>,
+					<a href="http://whiteskypony.deviantart.com/art/Maximo-s-Pony-model-SMD-Pack-1-438416795" target="_blank">WhiteSkyPony</a>,
+					<a href="http://beardeddoomguy.deviantart.com" target="_blank">BeardedDoomGuy</a>,
+					<a href="http://benno950.deviantart.com" target="_blank">Benno950</a>,
+					<a href="http://blackarmsgeneral.deviantart.com" target="_blank">BlackArmsGeneral</a>
+					
+					<br>
+						
+					<p>			
+					Original models <br>
+					<a href="http://kp-shadowsquirrel.deviantart.com/" target="_blank">KP-ShadowSquirrel</a>
+					<br> 
+					</p>
+					
+					<p>
+					Animations <br>
+					<a href="http://argodaemon.deviantart.com/" target="_blank">Argodaemon</a>, 
+					<a href="https://www.youtube.com/user/TaceoCinema/" target="_blank">TaceoCinema</a>, 
+					<a href="http://xprepwnedx.deviantart.com/" target="_blank">xPrEpWnEdx</a>,
+					<a href="http://deathirst.deviantart.com/" target="_blank">Deathirst</a>
+					<br>
+					</p>
+					 
+					2D designs <br>
+					<a href="http://mashabelyankina.deviantart.com/" target="_blank">Mashabelyankina</a>,
+					<a href="http://darksunrise957.deviantart.com/" target="_blank">Darksunrise957</a>,
+					<a href="http://ekuo.deviantart.com/" target="_blank">Ekuo</a>,
+					<a href="http://story-story.deviantart.com/" target="_blank">Story-Story.</a>,
+					<a href="http://deathirst.deviantart.com/" target="_blank">Deathirst</a>,
+					<a href="https://soundcloud.com/kuraitsuka" target="_blank">Vinyl Darkscratch</a>,
+					<a href="http://mlp-vector-collabs.deviantart.com/" target="_blank">MLP-Vector-Collabs</a>
+					
+					<br>
+					<p>
+					Pony Creator Logo <br>
+					<a href="http://ask-apple-bloom.deviantart.com/" target="_blank">Ask-Apple-Bloom</a>
+					<br>
+					</p>
+					
+					<p>
+					Miscellaneous help <br>
+					<a href="http://snow-sailor.deviantart.com/" target="_blank">Snow-Sailor</a>,
+					<a href="http://thehobocouncil.deviantart.com/" target="_blank">TheHoboCouncil</a>,
+					<a href="http://matriksoft.deviantart.com/" target="_blank">Matriksoft</a>
+					
+					<br>
+					</p>
+					
+					<p>
+					My Little Pony : Friendship is Magic (c) Hasbro 
+					<br>
+					</p>
+					
+					<p>
+					If I forgot an artist, don't hesitate to tell me and I'll credit you.
+					</p>
+					
+				</div>
+
+			</div> <!-- end F.A.Q -->
+		</div> <!-- end bottom-aera-right-->
+	</div> <!-- end bottom-aera -->
+	
+	
+	<!-- do not modify this -->
+	<input id="customCutieMark" type="file" style="visibility:hidden" onchange="importCutieMark(this);"/>
+	<input id="importPonySaveID2" type="file" style="visibility:hidden" onchange="importPonySave(this);"/>
+	<!--<input id="importTextureBody" type="file" style="visibility:hidden" onchange="importTextureBody1(this);"/>
+	<input id="importTextureEye" type="file" style="visibility:hidden" onchange="importTextureEye1(this);"/>-->
+	
+	<!-- lib -->
+	<script src="js/lib/webgl-utils.js"></script>
+	<script src="js/lib/gl-matrix-min.js"></script>
+	<script src="js/lib/jscolor/jscolor.js"></script>
+	<script src="js/lib/jszip.js"></script> 
+	<script src="js/lib/fileSaver.min.js"></script> 
+	<script src="js/lib/canvas-toBlob.js"></script> 
+
+
+	<!-- my classes -->
+	<script src="js/camera_v.0.3.0.js"></script>
+	<script src="js/light_v.0.3.0.js"></script>
+	<script src="js/modelCharacter_v.1.1.3.js"></script>
+	<script src="js/instanceCharacter_v.1.1.5.js"></script>
+	<script src="js/ponyCreator_v.1.1.9.js"></script>
+	<script src="js/objLoader_v.1.1.4a.js"></script>
+	<script src="js/smdLoader_v.1.1.4a.js"></script>
+	<script src="js/colladaLoader_v.0.4.2.js"></script>
+	<script src="js/binaryModel_v.0.9.7.js"></script>
+	<script src="js/mesh_v.1.0.4.js"></script>
+	<script src="js/animatedChain_v.1.0.5.js"></script>
+
+	<!-- cookie policy -->
+	<script src="/cookiebanner3.js"></script>
+	<script>
+	document.addEventListener('DOMContentLoaded', function(event) {
+		cookiebanner.show();
+	});
+	</script>
+	
+	
+
+
+
+	
+
+</body>
+</html>

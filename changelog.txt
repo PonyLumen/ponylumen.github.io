@@ -1,0 +1,216 @@
+v.1.1.9 17 April 2015
+Fix for transparent wings.
+
+v.1.1.8 09 April 2015
+Change position for custom cutie mark.
+Second color for eye.
+
+v.1.1.7 - 27 Mar 2015.
+Textures for female and male (with and without lipstick).
+
+v.1.1.6 - 13 Mar 2015.
+New accessory : scarf.
+4 mecha body textures.
+8 backgrounds.
+
+12 Jan 2015.
+New texture : spots for legs.
+
+v.1.1.5 - 9 Jan 2015.
+Translate camera with right click.
+Derpy mane and tail have 3 colors now.
+Luna mane has 3 colors now.
+New mecha eye.
+
+v.1.1.4 - 28 Nov 2014.
+SMD download (test)
+
+v.1.1.3 - 29 Sep 2014.
+Internet Explorer 11 compatibility.
+3D model download : obj + textures
+
+v.1.1.2 - 19 Sep 2014.
+Chrysalis body texture and new Chrysalis eye.
+Elements of harmony (6 new accessories).
+2 new eye shapes and eyelashes.
+Dark shoes
+						
+v.1.1.1 - 9 Sep 2014.
+Fleur de Lis mane and tail
+Flutterbat mane and tail
+Dark wings (not animated yet)
+Fangs
+bat / aviator / dragon wings fixed 
+
+v.1.1.0 - 5 Sep 2014.
+Nightmare moon eyes and rainbow eyes added.
+
+v.1.1.0 BETA - 2 Sep 2014.
+Long face added.
+New ears : spiked and star shaped.
+Ear size is now modifiable.
+New accessories added : Dark helm and dark collar.
+Mane-iac costume added.
+Ninja outfit added.
+25 new eyes.
+better texture quality.
+bug fix : face expressions.
+ 
+v.1.0.9 - 17 Aug 2014.
+Dragon eyes added.
+
+v.1.0.8 - 5 Aug 2014.
+Luna's new mane and tail added.
+
+v.1.0.7 - 9 May 2014.
+Chrysalis wings and horn, and crown.
+Big Macintosh mane and tail.
+Custom cutie mark bug corrected.
+
+v.1.0.6 - 25 Apr 2014.
+Right mech wing animation fixed.
+Sunset Shimmer mane, tail, cutie mark, and crown added.
+"Extra" tab added. 
+1 new sticker.
+3 new markings.
+some bugs fixed (obj download).
+			
+v.1.0.5 - 11 Apr 2014.
+Now tail and wing size are saved correctly. 
+Bat wings. 
+Dr Whooves cutie mark. 
+Socks. 
+Wing and tail pose.
+Head size option.
+3 new stickers added. 
+More wing animations.  
+			
+v.1.0.4 - 30 Mar 2014.
+PonySave (saves downloadable in text file).
+Wing and tail scale.
+Princess accessories.
+Zecora skin.
+Changeling eyes. 
+Colored muzzle.
+Wonderbolt outfit.
+Save limit extended from 8 to 20 ponies.
+
+v.1.0.3 - 20 Mar 2014.
+Bee accessories : adbomen and antennas.
+A new marking (stripes).
+Eye and face sliders reseted when page is refreshed.
+Pause/freeze animation.
+Bigger eyes.
+4 new eyes : Chrysalis, Snowdrop, love potion and heart.
+New accessory : Octavia collar (without the bow).
+Color choice for Rainbow's tail.
+
+v.1.0.2 - 15 Mar 2014.
+Animation speed option.
+Download 3d model as obj file (no texture and no accessories yet).
+CMC manes and tails (Applebloom, Scootaloo, Sweetie Belle).
+Download hi-res picture (Thanks to http://matriksoft.deviantart.com/).
+Lighting configuration is saved now.
+
+v.1.0.1 - 10 Mar 2014.
+eyes posing.
+left eye size now can be different form right eye.
+left eye shape now can be different form right eye.
+Mech wings added.
+Aviator wings added.
+3 accessories added, Vinyl glasses, monocle, round glasses.
+background color can be changed.
+Two minor bugs corrected. (Cloudchaser mane, and eyelashes)
+
+v.1.0 - 5 Mar 2014.
+Stallions.
+Freckles and 2 scars.
+Transparent background option.
+Save extended from 5 to 8 ponies.
+
+v.0.9.9 - 28 Feb 2014.
+Invisible body bug corrected.
+
+v.0.9.8 - 24 Feb 2014.
+4 new hairstyles and tails : Celestia, Luna (no tail for her), Cadence, wet mane/tail
+
+v.0.9.7 - 21 Feb 2014.
+Custom pose.
+
+v.0.9.6 - 18 Feb 2014.
+Closed wings.
+
+v.0.9.5 - 18 Feb 2014.
+Mane6 manes and tail + Coco Pommel's mane.
+New accessories : AJ hat, Coco hair clip, Coco tie, Rarity glasses.
+Large wings + option for color.
+Alicorn horn + option for color.
+Fillies and tall ponies.
+Small fix for some textures.
+
+v.0.9.4 - 11 Feb 2014.
+Upload custom cutie mark.
+Option for matching eye/mane/tail colors.
+
+v.0.9.3 - 9 Feb 2014.
+21 new cutie marks.
+
+v.0.9.2 - 6 Feb 2014.
+Small physic improvement. Mane, tail, and some accessories will move when you turn the pony, like
+the SFM Model Viewer.
+
+v.0.9.1 - 4 Feb 2014.
+Cow texture.
+
+v.0.9 - 2 Feb 2014.
+Weight and height can be modified.
+
+v.0.8.1 - 31 Jan 2014.
+20 new cutie marks.
+
+v.0.8 - 30 Jan 2014.
+3 new animations : walk, run, and trot.
+
+v.0.7.2 - 23 Jan 2014.
+6 new manes, 5 new tails : Lightning Dust, Nurse Redheart, Spitfire, Trixie, Pinkamena, and Solid Sparkle. 
+3 new accessories : Solid's headband, eyepatch, and headphones.
+
+v.0.7.1 - 22 Jan 2014.
+Teeth and eyelashes.
+Small GPU optimization for blend shapes.
+
+v.0.7.0 - 20 Jan 2014.
+New functionality : stickers.
+New functionality : light parameters can be modified.
+Some texture bug fixed. It shouldn't make a black "flash" anymore.
+
+v.0.6.0 - 13 Jan 2014.
+6 manes and 6 tails added : Aloe/Lotus, Berry Punch, Carrot Top, Cheerilee, Cloudchaser, and Flitter.
+Now you can save your pony !
+
+v.0.5.0 - 11 Jan 2014.
+added a download image function.
+3 first accessories added : spa necklace, Octavia's bowtie, and Flitter's bow hair.
+
+v.0.4.2 - 10 Jan 2014.
+Tongue added.
+
+v.0.4.1 - 06 Jan 2014.
+Small gpu memory optimization for face expressions.
+
+v.0.4.0 - 05 Jan 2014.
+Face expressions coded.
+
+v.0.3.1 - 03 Jan 2014.
+Multi axis rotation fixed (one axis moved to center the pony).
+
+v.0.3.0 - 02 Jan 2014.
+A (not so) small bug in a binary file (Vinyl mane) has been corrected.
+The eyes can be changed (color, type, size).
+The eyes move with the cursor.
+Multi axis rotation added.
+Zoom function added.
+New option to see the light position (debug).
+
+v.0.2 - 28 Dec 2013.
+First demo released. Yay !
