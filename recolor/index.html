@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Swapper</title>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --accent: #bb86fc; --text: #e0e0e0; --modified: #2e3b2e; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        .header { padding: 10px 20px; background: var(--panel); border-bottom: 1px solid #333; display: flex; align-items: center; gap: 15px; z-index: 10; }
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+
+        .sidebar { width: 40%; background: var(--panel); padding: 20px; border-right: 1px solid #333; overflow-y: auto; box-sizing: border-box; scroll-behavior: smooth; }
+        
+        .viewport { width: 60%; position: relative; cursor: grab; background-color: #0a0a0a;
+            background-image: linear-gradient(45deg, #151515 25%, transparent 25%), linear-gradient(-45deg, #151515 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #151515 75%), linear-gradient(-45deg, transparent 75%, #151515 75%);
+            background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            overflow: hidden; }
+        .viewport.eyedropper-mode { cursor: crosshair; }
+
+        canvas { image-rendering: pixelated; transform-origin: 0 0; position: absolute; top: 0; left: 0; }
+
+        .palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 12px; margin-top: 20px; }
+        .color-item { background: #252525; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; border: 2px solid transparent; transition: all 0.2s; }
+        .color-item.is-modified { background: var(--modified); border-color: #4e6b4e; }
+        .color-item.is-grouped { background: #3b3b4d; border-color: var(--accent); }
+        .color-item.highlight { border-color: var(--accent); transform: scale(1.05); box-shadow: 0 0 10px var(--accent); }
+        
+        input[type="color"] { width: 45px; height: 45px; border: none; cursor: pointer; background: none; }
+        .freq-label { font-size: 10px; color: #aaa; font-family: monospace; }
+        
+        .btn { padding: 6px 12px; cursor: pointer; background: #333; border: 1px solid #555; color: white; border-radius: 4px; font-size: 13px; outline: none; }
+        .btn:hover { background: #444; }
+        .btn.active { background: var(--accent); color: black; border-color: var(--accent); }
+        .btn-save { background: #03dac6; color: black; border: none; font-weight: bold; }
+        
+        .zoom-label { font-family: monospace; font-weight: bold; color: var(--accent); margin-left: auto; }
+        .zoom-display { width: 50px; font-family: monospace; font-weight: bold; color: var(--accent); }
+        .hidden { display: none !important; }
+
+        .reset-single { background: none; border: none; color: #888; cursor: pointer; font-size: 14px; padding: 0 4px; }
+        .reset-single:hover { color: var(--accent); }
+        .group-toggle { cursor: pointer; transform: scale(1.2); }
+		
+		.viewport.drag-over {
+			outline: 3px dashed var(--accent);
+			outline-offset: -10px;
+			background-color: rgba(187, 134, 252, 0.1);
+		}
+		
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <strong>Pixel Swapper</strong>
+    <input type="file" id="upload" accept="image/png">
+    
+    <div id="tools-ui" class="hidden" style="display:flex; align-items:center; gap:10px; flex:1">
+        <button id="eyedropperBtn" class="btn">Eyedropper (E)</button>
+        <button onclick="groupSimilarHues()" class="btn">Group Similar</button>
+        <button onclick="uncheckAllGroups()" class="btn">Uncheck All</button>
+        <button onclick="resetTransform()" class="btn">Center View</button>
+        <button onclick="globalReset()" class="btn" style="border-color: #cf6679; color: #cf6679;">Global Reset</button>
+		<button id="savePaletteBtn" class="btn">Save Palette (.txt)</button>
+		<button onclick="document.getElementById('importFile').click()" class="btn">Import Palette (.txt)</button>
+		<input type="file" id="importFile" class="hidden" accept=".txt">
+        <button id="saveBtn" class="btn btn-save">Save PNG</button>
+        <span class="zoom-label">zoom:</span>
+        <span class="zoom-display" id="zoomValue">1.0x</span>
+    </div>
+</div>
+
+<div class="main-container">
+    <div class="sidebar">
+        <div id="palette-container" class="hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                <strong>Palette</strong>
+                <select id="sortSelect" class="btn" style="padding: 2px 5px;">
+                    <option value="frequency">Sort: Frequency</option>
+                    <option value="hue">Sort: Hue</option>
+                    <option value="brightness">Sort: Brightness</option>
+                    <option value="saturation">Sort: Saturation</option>
+                </select>
+            </div>
+            <span id="color-count" style="font-size:12px; color:#888; display:block; margin-bottom:10px;"></span>
+            <div id="palette-grid" class="palette-grid"></div>
+        </div>
+        <div id="empty-state">Upload a pixel art PNG to begin.</div>
+    </div>
+    <div class="viewport" id="viewport">
+        <canvas id="canvas"></canvas>
+    </div>
+</div>
+
+<script>
+    const upload = document.getElementById('upload');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const viewport = document.getElementById('viewport');
+    const zoomValue = document.getElementById('zoomValue');
+    const paletteGrid = document.getElementById('palette-grid');
+    const eyedropperBtn = document.getElementById('eyedropperBtn');
+    const saveBtn = document.getElementById('saveBtn');
+
+    let originalPixels = [];
+    let width, height;
+    let colorEntries = [];
+    let scale = 1, translateX = 0, translateY = 0;
+    let isDragging = false, lastMouseX, lastMouseY;
+    let isEyedropperActive = false;
+    let groupedIndices = new Set();
+    let updateTimeout;
+	let isEdited = false;
+
+    // --- INITIALIZATION & UPLOAD ---
+	
+    upload.addEventListener('change', (e) => {
+		if (e.target.files[0]) loadFile(e.target.files[0])
+    });
+
+    function analyzePalette() {
+        const counts = {};
+        for (let i = 0; i < originalPixels.length; i += 4) {
+            if (originalPixels[i+3] === 0) continue; 
+            const rgb = `${originalPixels[i]},${originalPixels[i+1]},${originalPixels[i+2]}`;
+            counts[rgb] = (counts[rgb] || 0) + 1;
+        }
+        colorEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => {
+            const hex = rgbToHex(e[0]);
+            return { 
+                rgb: e[0], 
+                count: e[1], 
+                originalHex: hex,
+                currentHex: hex, // Initialize currentHex
+                originalHSL: hexToHSL(hex)
+            };
+        });
+        document.getElementById('color-count').textContent = `${colorEntries.length} colors found`;
+        renderPaletteUI();
+    }
+
+    function renderPaletteUI() {
+        paletteGrid.innerHTML = '';
+        colorEntries.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'color-item';
+            div.id = `color-${item.rgb.replace(/,/g, '-')}`;
+            div.innerHTML = `
+                <div style="display:flex; width:100%; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <input type="checkbox" class="group-toggle" data-index="${index}" title="Link to Group">
+                    <span class="freq-label">${item.count}px</span>
+                    <button class="reset-single" data-index="${index}" title="Reset Color">↺</button>
+                </div>
+                <input type="color" value="${item.currentHex}" data-index="${index}">
+            `;
+            
+            const colorInput = div.querySelector('input[type="color"]');
+            const checkbox = div.querySelector('.group-toggle');
+            const resetBtn = div.querySelector('.reset-single');
+            
+            colorInput.addEventListener('input', handleColorInput);
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) { groupedIndices.add(index); div.classList.add('is-grouped'); }
+                else { groupedIndices.delete(index); div.classList.remove('is-grouped'); }
+            });
+            resetBtn.addEventListener('click', () => {
+                colorInput.value = item.originalHex;
+                handleColorInput({ target: colorInput }); 
+            });
+            paletteGrid.appendChild(div);
+        });
+    }
+
+    // --- COLOR LOGIC ---
+    function handleColorInput(e) {
+		isEdited = true; 
+        const masterIdx = parseInt(e.target.dataset.index);
+        const newHex = e.target.value;
+        const masterEntry = colorEntries[masterIdx];
+        
+        if (groupedIndices.has(masterIdx)) {
+            const currentMasterHSL = hexToHSL(newHex);
+            const dH = currentMasterHSL.h - masterEntry.originalHSL.h;
+            const dS = currentMasterHSL.s - masterEntry.originalHSL.s;
+            const dL = currentMasterHSL.l - masterEntry.originalHSL.l;
+
+            groupedIndices.forEach(idx => {
+                if (idx === masterIdx) return;
+                const slaveEntry = colorEntries[idx];
+                const slaveInput = document.querySelector(`input[type="color"][data-index="${idx}"]`);
+                const finalHex = hslToHex((slaveEntry.originalHSL.h + dH + 360) % 360, Math.min(100, Math.max(0, slaveEntry.originalHSL.s + dS)), Math.min(100, Math.max(0, slaveEntry.originalHSL.l + dL)));
+                slaveInput.value = finalHex;
+                colorEntries[idx].currentHex = finalHex;
+                slaveInput.parentElement.classList.toggle('is-modified', finalHex.toLowerCase() !== slaveEntry.originalHex.toLowerCase());
+            });
+        }
+        colorEntries[masterIdx].currentHex = newHex;
+        e.target.parentElement.classList.toggle('is-modified', newHex.toLowerCase() !== masterEntry.originalHex.toLowerCase());
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(updateImage, 50);
+    }
+
+    function updateImage() {
+        if (!originalPixels.length) return;
+        const colorMap = {};
+        colorEntries.forEach(entry => colorMap[entry.rgb] = hexToRgb(entry.currentHex));
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        for (let i = 0; i < originalPixels.length; i += 4) {
+            if (originalPixels[i+3] === 0) continue;
+            const key = `${originalPixels[i]},${originalPixels[i+1]},${originalPixels[i+2]}`;
+            const c = colorMap[key];
+            if (c) { data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2]; }
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    // --- TOOLS ---
+    function groupSimilarHues() {
+        const threshold = 20;
+        let seeds = groupedIndices.size > 0 ? Array.from(groupedIndices) : [0];
+        const seedHues = seeds.map(idx => colorEntries[idx].originalHSL.h);
+        colorEntries.forEach((entry, idx) => {
+            const h = entry.originalHSL.h;
+            if (seedHues.some(sh => { let d = Math.abs(sh - h); return (d > 180 ? 360 - d : d) < threshold; })) {
+                groupedIndices.add(idx);
+                const item = document.getElementById(`color-${entry.rgb.replace(/,/g, '-')}`);
+                if (item) { item.classList.add('is-grouped'); item.querySelector('.group-toggle').checked = true; }
+            }
+        });
+    }
+
+    function uncheckAllGroups() {
+        groupedIndices.clear();
+        document.querySelectorAll('.color-item').forEach(el => { el.classList.remove('is-grouped'); el.querySelector('.group-toggle').checked = false; });
+    }
+
+    function globalReset() {
+        if (!confirm("Reset everything?")) return;
+		isEdited = false;
+        uncheckAllGroups();
+        colorEntries.forEach(item => { item.currentHex = item.originalHex; });
+        renderPaletteUI();
+        updateImage();
+    }
+
+    function sortPalette(criteria) {
+        const items = Array.from(paletteGrid.children);
+        items.sort((a, b) => {
+            const eA = colorEntries[a.querySelector('input').dataset.index], eB = colorEntries[b.querySelector('input').dataset.index];
+            if (criteria === 'frequency') return eB.count - eA.count;
+            if (criteria === 'hue') return eA.originalHSL.h - eB.originalHSL.h;
+            if (criteria === 'brightness') return eB.originalHSL.l - eA.originalHSL.l;
+            if (criteria === 'saturation') return eB.originalHSL.s - eA.originalHSL.s;
+            return 0;
+        });
+        paletteGrid.innerHTML = '';
+        items.forEach(i => paletteGrid.appendChild(i));
+    }
+
+    // --- VIEWPORT CONTROL ---
+    function autoFitImage() {
+        const vW = viewport.clientWidth, vH = viewport.clientHeight;
+        const m = 0.9, sX = (vW * m) / width, sY = (vH * m) / height;
+        scale = Math.max(1, Math.min(sX, sY));
+        translateX = (vW - (width * scale)) / 2; translateY = (vH - (height * scale)) / 2;
+        updateTransform();
+    }
+
+    function updateTransform() {
+        canvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        zoomValue.textContent = `${scale.toFixed(1)}x`;
+    }
+
+    function resetTransform() { autoFitImage(); }
+
+    viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const nextScale = Math.min(Math.max(0.1, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 80);
+        translateX = mx - (mx - translateX) * (nextScale / scale);
+        translateY = my - (my - translateY) * (nextScale / scale);
+        scale = nextScale; updateTransform();
+    }, { passive: false });
+
+    viewport.addEventListener('mousedown', (e) => { if (isEyedropperActive && e.target === canvas) return; isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; });
+    window.addEventListener('mousemove', (e) => { if (!isDragging) return; translateX += e.clientX - lastMouseX; translateY += e.clientY - lastMouseY; lastMouseX = e.clientX; lastMouseY = e.clientY; updateTransform(); });
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!isEyedropperActive) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / scale), y = Math.floor((e.clientY - rect.top) / scale);
+        if (x < 0 || y < 0 || x >= width || y >= height) return;
+        const i = (y * width + x) * 4;
+        if (originalPixels[i+3] === 0) return;
+        const target = document.getElementById(`color-${originalPixels[i]}-${originalPixels[i+1]}-${originalPixels[i+2]}`);
+        if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); target.classList.add('highlight'); setTimeout(() => target.classList.remove('highlight'), 2000); }
+    });
+
+    eyedropperBtn.onclick = () => { isEyedropperActive = !isEyedropperActive; eyedropperBtn.classList.toggle('active', isEyedropperActive); viewport.classList.toggle('eyedropper-mode', isEyedropperActive); };
+    window.addEventListener('keydown', (e) => { if(e.key.toLowerCase() === 'e') eyedropperBtn.click(); });
+    saveBtn.onclick = () => { const link = document.createElement('a'); link.download = `${currentFileName}.png`; link.href = canvas.toDataURL(); link.click(); };
+    document.getElementById('sortSelect').addEventListener('change', (e) => sortPalette(e.target.value));
+
+    // --- HELPERS ---
+    function hexToRgb(h) { return [parseInt(h.slice(1,3), 16), parseInt(h.slice(3,5), 16), parseInt(h.slice(5,7), 16)]; }
+    function rgbToHex(rgb) { const [r,g,b] = rgb.split(','); return "#" + [r,g,b].map(x => parseInt(x).toString(16).padStart(2, '0')).join(''); }
+    function hexToHSL(hex) {
+        let r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+        let max = Math.max(r, g, b), min = Math.min(r, g, b), h, s, l = (max + min) / 2;
+        if (max === min) h = s = 0;
+        else {
+            let d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; }
+            h /= 6;
+        }
+        return { h: h * 360, s: s * 100, l: l * 100 };
+    }
+    function hslToHex(h, s, l) {
+        l /= 100; const a = s * Math.min(l, 1 - l) / 100;
+        const f = n => { const k = (n + h / 30) % 12, color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); return Math.round(255 * color).toString(16).padStart(2, '0'); };
+        return `#${f(0)}${f(8)}${f(4)}`;
+    }
+	
+	const savePaletteBtn = document.getElementById('savePaletteBtn');
+
+	savePaletteBtn.onclick = () => {
+		let content = `Palette Map for ${currentFileName}\n`;
+		content += `Generated on: ${new Date().toLocaleString()}\n`;
+		content += `-------------------------------------------\n\n`;
+
+		colorEntries.forEach((item, index) => {
+			// FIX: Specifically target the color input, not the checkbox
+			const colorInput = document.querySelector(`input[type="color"][data-index="${index}"]`);
+			const currentHex = colorInput ? colorInput.value.toLowerCase() : item.originalHex.toLowerCase();
+			const originalHex = item.originalHex.toLowerCase();
+
+			// Only report the change if the hex values are actually different
+			if (currentHex !== originalHex) {
+				content += `CHANGED:  ${originalHex}  =>  ${currentHex}\n`;
+			}
+		});
+
+		const blob = new Blob([content], { type: 'text/plain' });
+		const link = document.createElement('a');
+		link.download = `${currentFileName}_palette.txt`;
+		link.href = URL.createObjectURL(blob);
+		link.click();
+		
+		// Cleanup the URL object
+		setTimeout(() => URL.revokeObjectURL(link.href), 100);
+	};
+	
+	const importFile = document.getElementById('importFile');
+
+	importFile.addEventListener('change', (e) => {
+		const file = e.target.files[0];
+		if (!file) return;
+
+		const reader = new FileReader();
+		reader.onload = (event) => {
+			const lines = event.target.result.split('\n');
+			let changesApplied = 0;
+
+			lines.forEach(line => {
+				// Regex to find: CHANGED: #original => #new
+				const match = line.match(/CHANGED:\s+(#[0-9a-fA-F]{6})\s+=>\s+(#[0-9a-fA-F]{6})/);
+				
+				if (match) {
+					const originalHex = match[1].toLowerCase();
+					const newHex = match[2].toLowerCase();
+
+					// Find the entry in our current palette that matches the original hex
+					const entryIndex = colorEntries.findIndex(item => 
+						item.originalHex.toLowerCase() === originalHex
+					);
+
+					if (entryIndex !== -1) {
+						const colorInput = document.querySelector(`input[type="color"][data-index="${entryIndex}"]`);
+						if (colorInput) {
+							colorInput.value = newHex;
+							// Manually trigger the input logic (updates state and groups)
+							handleColorInput({ target: colorInput });
+							changesApplied++;
+						}
+					}
+				}
+			});
+
+			// Reset the input so you can import the same file again if needed
+			importFile.value = '';
+		};
+		reader.readAsText(file);
+	});
+
+	function loadFile(file) {
+		if (isEdited && !confirm("You have unsaved changes. Are you sure you want to load a new image and discard current edits?")) {
+			return;
+		}
+		
+		isEdited = false;
+		
+		const reader = new FileReader();
+		reader.onload = (event) => {
+			const img = new Image();
+			img.onload = () => {
+				width = canvas.width = img.width;
+				height = canvas.height = img.height;
+				ctx.drawImage(img, 0, 0);
+				originalPixels = Array.from(ctx.getImageData(0, 0, width, height).data);
+				
+				// Reset state
+				groupedIndices.clear();
+				currentFileName = file.name.replace(/\.[^/.]+$/, ""); 
+				
+				analyzePalette();
+				document.getElementById('tools-ui').classList.remove('hidden');
+				document.getElementById('palette-container').classList.remove('hidden');
+				document.getElementById('empty-state').classList.add('hidden');
+				autoFitImage();
+			};
+			img.src = event.target.result;
+		};
+		reader.readAsDataURL(file);
+	}
+
+	viewport.addEventListener('dragover', (e) => {
+		e.preventDefault();
+		viewport.classList.add('drag-over');
+	});
+
+	viewport.addEventListener('dragleave', () => {
+		viewport.classList.remove('drag-over');
+	});
+
+	viewport.addEventListener('drop', (e) => {
+		e.preventDefault();
+		viewport.classList.remove('drag-over');
+		const file = e.dataTransfer.files[0];
+		if (file && file.type === "image/png") {
+			loadFile(file);
+		} else {
+			alert("Please drop a valid PNG image.");
+		}
+	});
+
+
+	upload.addEventListener('change', (e) => {
+		if (e.target.files[0]) loadFile(e.target.files[0]);
+	});
+
+</script>
+</body>
+</html>
